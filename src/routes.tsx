@@ -9,6 +9,7 @@ import { RekapHarianPage } from "./pages/RekapHarianPage";
 import { PesananPage } from "./pages/PesananPage";
 import { TambahPesananPage } from "./pages/TambahPesananPage";
 import { PenjokiPage } from "./pages/PenjokiPage";
+import { PenjokiManajemenPage } from "./pages/PenjokiManajemenPage";
 
 /** Guard: wajib login. Scoping owner/admin ditegakkan RLS di database (D1). */
 function RequireAuth() {
@@ -38,6 +39,7 @@ export const router = createBrowserRouter([
       { path: "/pesanan", element: <PesananPage /> },
       { path: "/pesanan/baru", element: <TambahPesananPage /> },
       { path: "/penjoki", element: <PenjokiPage /> },
+      { path: "/penjoki/manajemen", element: <PenjokiManajemenPage /> },
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },

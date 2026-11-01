@@ -7,19 +7,34 @@ import {
   ChartBarIcon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
+  Cog6ToothIcon,
   ClipboardIcon,
   HomeIcon,
   PlusCircleIcon,
   UsersIcon,
 } from "./icons";
 
-const nav = [
+const baseNav = [
   { to: "/", label: "Dashboard", icon: HomeIcon, end: true },
   { to: "/rekap", label: "Data Rekap Harian", icon: ClipboardIcon },
   { to: "/pesanan", label: "Daftar Pesanan", icon: ChartBarIcon },
   { to: "/pesanan/baru", label: "Tambah Pesanan", icon: PlusCircleIcon },
-  { to: "/penjoki", label: "Penjoki & Rate", icon: UsersIcon },
+  { to: "/penjoki", label: "Penjoki & Rate", icon: UsersIcon, end: true },
 ];
+
+/** Menu "Manajemen Penjoki" hanya untuk OWNER (CRUD penuh — add/hapus/rating/kategori). */
+export function navItems(isOwner: boolean) {
+  return isOwner
+    ? [
+        ...baseNav,
+        {
+          to: "/penjoki/manajemen",
+          label: "Manajemen Penjoki",
+          icon: Cog6ToothIcon,
+        },
+      ]
+    : baseNav;
+}
 
 const STORAGE_KEY = "jta-sidebar-collapsed";
 
@@ -59,7 +74,7 @@ function SidebarContent({
 
       {/* Nav */}
       <nav className="flex-1 space-y-1 px-3 py-2">
-        {nav.map(({ to, label, icon: Icon, end }) => (
+        {navItems(isOwner).map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
@@ -147,9 +162,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
     localStorage.setItem(STORAGE_KEY, collapsed ? "1" : "0");
   }, [collapsed]);
 
-  const current = nav.find((n) =>
-    n.end ? location.pathname === n.to : location.pathname.startsWith(n.to)
-  );
+  // Pilih yang paling spesifik (mis. /penjoki/manajemen menang atas /penjoki)
+  const current = navItems(isOwner)
+    .filter((n) =>
+      n.end ? location.pathname === n.to : location.pathname.startsWith(n.to)
+    )
+    .sort((a, b) => b.to.length - a.to.length)[0];
 
   return (
     <div className="min-h-screen bg-bg-main">

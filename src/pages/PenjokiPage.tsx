@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
 import { awalBulanIni } from "../lib/format";
@@ -8,7 +9,6 @@ import {
   Button,
   Card,
   EmptyState,
-  Field,
   RateBadge,
   Spinner,
   TeamTabs,
@@ -16,24 +16,16 @@ import {
 } from "../components/ui";
 
 /**
- * Daftar Penjoki & Rate Keaktifan (mockup biru layar 4 & 6).
+ * Daftar Penjoki & Rate Keaktifan (tampilan-saja).
+ * CRUD penuh (add/edit/hapus/rating/kategori) ada di menu khusus owner
+ * "Manajemen Penjoki" (/penjoki/manajemen).
  * RATE_PROVISIONAL: formula sementara = tugas selesai (selesai+bayar+fisk)
  * dibanding total pesanan bulan berjalan. Formula final menunggu keputusan D6.
  */
 export function PenjokiPage() {
   const { isOwner, teams, teamFilter, setTeamFilter, applyScope } = useScope();
-  const qc = useQueryClient();
+  const navigate = useNavigate();
   const [cari, setCari] = useState("");
-
-  // Form tambah (owner only)
-  const [showForm, setShowForm] = useState(false);
-  const [fNama, setFNama] = useState("");
-  const [fWa, setFWa] = useState("");
-  const [fTim, setFTim] = useState("");
-  const [fRating, setFRating] = useState("");
-  const [fKeahlian, setFKeahlian] = useState("");
-  const [fKeterangan, setFKeterangan] = useState("");
-  const [formError, setFormError] = useState<string | null>(null);
 
   const { data: penjoki, isLoading } = useQuery({
     queryKey: ["penjoki", teamFilter],
@@ -79,46 +71,6 @@ export function PenjokiPage() {
     return Math.round((s.selesai / s.total) * 100);
   };
 
-  const tambah = useMutation({
-    mutationFn: async () => {
-      if (!fNama.trim() || !fTim) throw new Error("Nama & tim wajib diisi.");
-      const { error } = await supabase.from("penjoki").insert({
-        nama: fNama.trim(),
-        no_hp: fWa.trim() || null,
-        team_id: fTim,
-        rating_skill: fRating ? Number(fRating) : null,
-        keahlian: fKeahlian
-          .split(",")
-          .map((k) => k.trim())
-          .filter(Boolean),
-        keterangan: fKeterangan.trim() || null,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["penjoki"] });
-      setShowForm(false);
-      setFNama("");
-      setFWa("");
-      setFRating("");
-      setFKeahlian("");
-      setFKeterangan("");
-      setFormError(null);
-    },
-    onError: (e) => setFormError((e as Error).message),
-  });
-
-  const toggleAktif = useMutation({
-    mutationFn: async (p: PenjokiRow) => {
-      const { error } = await supabase
-        .from("penjoki")
-        .update({ aktif: !p.aktif })
-        .eq("id", p.id);
-      if (error) throw error;
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["penjoki"] }),
-  });
-
   if (isLoading) return <Spinner />;
 
   const list = (penjoki ?? []).filter((p) =>
@@ -131,6 +83,13 @@ export function PenjokiPage() {
         Lihat daftar penjoki, tim, dan tingkat keaktifannya.{" "}
         <strong>Rate</strong> dihitung dari tugas yang selesai (pembayaran + fisk) pada
         bulan berjalan — formula final menyusul konfirmasi client.
+        {isOwner && (
+          <>
+            {" "}
+            Untuk <strong>tambah/edit/hapus penjoki, rating &amp; kategori</strong>,
+            gunakan menu <strong>Manajemen Penjoki</strong>.
+          </>
+        )}
       </p>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -141,57 +100,11 @@ export function PenjokiPage() {
           className={`${inputCls} w-full max-w-xs`}
         />
         {isOwner && (
-          <Button variant="primary" onClick={() => setShowForm((s) => !s)}>
-            {showForm ? "Tutup Form" : "+ Tambah Penjoki"}
+          <Button variant="primary" onClick={() => navigate("/penjoki/manajemen")}>
+            ⚙️ Kelola Penjoki
           </Button>
         )}
       </div>
-
-      {showForm && (
-        <Card className="p-5">
-          <p className="mb-4 text-xs font-bold uppercase tracking-wide text-text-muted">
-            Tambah Penjoki Baru
-          </p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Nama">
-              <input value={fNama} onChange={(e) => setFNama(e.target.value)} className={inputCls} placeholder="Nama penjoki" />
-            </Field>
-            <Field label="No. WhatsApp">
-              <input value={fWa} onChange={(e) => setFWa(e.target.value)} className={inputCls} placeholder="08xx" />
-            </Field>
-            <Field label="Tim">
-              <select value={fTim} onChange={(e) => setFTim(e.target.value)} className={inputCls}>
-                <option value="">— Pilih tim —</option>
-                {teams.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.nama}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Rating Skill (0–100)">
-              <input type="number" min={0} max={100} value={fRating} onChange={(e) => setFRating(e.target.value)} className={inputCls} placeholder="85" />
-            </Field>
-            <Field label="Keahlian" hint="Pisahkan dengan koma">
-              <input value={fKeahlian} onChange={(e) => setFKeahlian(e.target.value)} className={inputCls} placeholder="Laporan PKL, PPT, Makalah" />
-            </Field>
-            <Field label="Keterangan">
-              <input value={fKeterangan} onChange={(e) => setFKeterangan(e.target.value)} className={inputCls} placeholder="Fast response, teliti…" />
-            </Field>
-          </div>
-          {formError && (
-            <p className="mt-3 text-sm font-semibold text-danger">{formError}</p>
-          )}
-          <Button
-            variant="success"
-            className="mt-4"
-            disabled={tambah.isPending}
-            onClick={() => tambah.mutate()}
-          >
-            {tambah.isPending ? "Menyimpan…" : "Simpan Penjoki"}
-          </Button>
-        </Card>
-      )}
 
       {isOwner && <TeamTabs teams={teams} value={teamFilter} onChange={setTeamFilter} />}
 
@@ -210,7 +123,6 @@ export function PenjokiPage() {
                   <th className="px-5 py-3 text-center font-bold">Tugas (bln ini)</th>
                   <th className="px-5 py-3 text-center font-bold">Rate</th>
                   <th className="px-5 py-3 font-bold">Status</th>
-                  {isOwner && <th className="px-5 py-3 text-right font-bold">Aksi</th>}
                 </tr>
               </thead>
               <tbody>
@@ -269,13 +181,6 @@ export function PenjokiPage() {
                           {p.aktif ? "Aktif" : "Nonaktif"}
                         </span>
                       </td>
-                      {isOwner && (
-                        <td className="px-5 py-3 text-right">
-                          <Button variant="ghost" onClick={() => toggleAktif.mutate(p)}>
-                            {p.aktif ? "Nonaktifkan" : "Aktifkan"}
-                          </Button>
-                        </td>
-                      )}
                     </tr>
                   );
                 })}
