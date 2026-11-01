@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
@@ -72,7 +72,7 @@ export function TambahPesananPage() {
     enabled: Boolean(scopedTeamId),
   });
 
-  const { data: customerList } = useQuery({
+  const { data: customerList, isSuccess: customerLoaded } = useQuery({
     queryKey: ["customer-form", scopedTeamId],
     queryFn: async (): Promise<Customer[]> => {
       let q = supabase.from("customers").select("*").order("nama").limit(100);
@@ -83,6 +83,13 @@ export function TambahPesananPage() {
     },
     enabled: Boolean(scopedTeamId),
   });
+
+  // Belum ada customer sama sekali → langsung arahkan ke mode "Customer baru"
+  // supaya admin/owner tidak bingung melihat dropdown kosong.
+  useEffect(() => {
+    if (customerLoaded && (customerList?.length ?? 0) === 0)
+      setCustomerMode("baru");
+  }, [customerLoaded, customerList]);
 
   const simpan = useMutation({
     mutationFn: async () => {
@@ -147,6 +154,8 @@ export function TambahPesananPage() {
       qc.invalidateQueries({ queryKey: ["pesanan"] });
       qc.invalidateQueries({ queryKey: ["dashboard-pesanan"] });
       qc.invalidateQueries({ queryKey: ["rekap"] });
+      // Customer baru ikut di-invalidate → muncul di dropdown "Customer lama"
+      qc.invalidateQueries({ queryKey: ["customer-form"] });
       navigate("/pesanan");
     },
     onError: (e) => setError((e as Error).message),
@@ -242,18 +251,33 @@ export function TambahPesananPage() {
               </button>
             </div>
             {customerMode === "pilih" ? (
-              <select
-                value={customerId}
-                onChange={(e) => setCustomerId(e.target.value)}
-                className={inputCls}
-              >
-                <option value="">— Pilih customer —</option>
-                {customerList?.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nama} ({c.no_wa})
-                  </option>
-                ))}
-              </select>
+              <>
+                <select
+                  value={customerId}
+                  onChange={(e) => setCustomerId(e.target.value)}
+                  className={inputCls}
+                  disabled={(customerList?.length ?? 0) === 0}
+                >
+                  {(customerList?.length ?? 0) === 0 ? (
+                    <option>— Belum ada customer, pilih "Customer baru" —</option>
+                  ) : (
+                    <>
+                      <option value="">— Pilih customer —</option>
+                      {customerList?.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nama} ({c.no_wa})
+                        </option>
+                      ))}
+                    </>
+                  )}
+                </select>
+                {(customerList?.length ?? 0) === 0 && (
+                  <p className="mt-1.5 text-xs font-semibold text-text-muted">
+                    Customer baru tersimpan otomatis ke tim Anda, lalu bisa dipakai
+                    lagi di pesanan berikutnya.
+                  </p>
+                )}
+              </>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 <input
