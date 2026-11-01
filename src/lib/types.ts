@@ -52,6 +52,8 @@ export interface Pesanan {
   jenis_tugas_id: string;
   penjoki_id: string;
   harga: number;
+  fee_admin: number;
+  fee_penjoki: number;
   jumlah_keterangan: string;
   catatan: string | null;
   status: PesananStatus;

@@ -1,10 +1,12 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   ArrowRightStartOnRectIcon,
   Bars3Icon,
   ChartBarIcon,
+  ChevronDoubleLeftIcon,
+  ChevronDoubleRightIcon,
   ClipboardIcon,
   HomeIcon,
   PlusCircleIcon,
@@ -19,25 +21,40 @@ const nav = [
   { to: "/penjoki", label: "Penjoki & Rate", icon: UsersIcon },
 ];
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+const STORAGE_KEY = "jta-sidebar-collapsed";
+
+function SidebarContent({
+  collapsed,
+  onToggle,
+  onNavigate,
+}: {
+  collapsed: boolean;
+  onToggle: () => void;
+  onNavigate?: () => void;
+}) {
   const { profile, signOut } = useAuth();
   const isOwner = profile?.role === "OWNER";
+  const initials = (profile?.nama_lengkap ?? "?").slice(0, 2).toUpperCase();
 
   return (
     <div className="flex h-full flex-col bg-navy text-white">
       {/* Brand */}
-      <div className="flex items-center gap-3 px-5 pt-6 pb-5">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-brand bg-navy-light font-display text-lg font-extrabold text-brand">
+      <div
+        className={`flex items-center gap-3 px-4 pt-6 pb-5 ${collapsed ? "justify-center px-2" : "px-5"}`}
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-brand bg-navy-light font-display text-lg font-extrabold text-brand">
           JT
         </span>
-        <div className="min-w-0">
-          <p className="truncate font-display text-sm font-extrabold tracking-wide">
-            JOKITUGASAJA_ID
-          </p>
-          <p className="text-[10px] font-semibold tracking-[0.18em] text-sky-300/80">
-            CEPAT · MURAH · TERPERCAYA
-          </p>
-        </div>
+        {!collapsed && (
+          <div className="min-w-0">
+            <p className="truncate font-display text-sm font-extrabold tracking-wide">
+              JOKITUGASAJA_ID
+            </p>
+            <p className="text-[10px] font-semibold tracking-[0.18em] text-sky-300/80">
+              CEPAT · MURAH · TERPERCAYA
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Nav */}
@@ -48,8 +65,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             to={to}
             end={end}
             onClick={onNavigate}
+            title={collapsed ? label : undefined}
             className={({ isActive }) =>
-              `flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-all ${
+              `flex items-center rounded-xl text-sm font-semibold transition-all ${
+                collapsed ? "justify-center px-0 py-3" : "gap-3 px-3.5 py-2.5"
+              } ${
                 isActive
                   ? "bg-brand text-white shadow-[0_4px_14px_rgba(2,132,199,0.35)]"
                   : "text-slate-300 hover:bg-navy-light hover:text-white"
@@ -57,27 +77,52 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             }
           >
             <Icon className="h-5 w-5 shrink-0" />
-            {label}
+            {!collapsed && label}
           </NavLink>
         ))}
       </nav>
 
+      {/* Toggle minimize */}
+      <button
+        onClick={onToggle}
+        title={collapsed ? "Perluas sidebar" : "Minimize sidebar"}
+        className={`mx-3 mb-2 hidden items-center rounded-xl border border-white/10 py-2 text-slate-300 transition-all hover:bg-navy-light hover:text-white lg:flex ${
+          collapsed ? "justify-center" : "gap-3 px-3.5"
+        }`}
+      >
+        {collapsed ? (
+          <ChevronDoubleRightIcon className="h-5 w-5" />
+        ) : (
+          <>
+            <ChevronDoubleLeftIcon className="h-5 w-5" />
+            <span className="text-xs font-bold">Minimize</span>
+          </>
+        )}
+      </button>
+
       {/* User + logout */}
       <div className="border-t border-white/10 p-4">
-        <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-xs font-extrabold text-white">
-            {(profile?.nama_lengkap ?? "?").slice(0, 2).toUpperCase()}
+        <div className={`flex items-center gap-3 ${collapsed ? "flex-col" : ""}`}>
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-extrabold text-white"
+            title={collapsed ? profile?.nama_lengkap : undefined}
+          >
+            {initials}
           </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold">{profile?.nama_lengkap}</p>
-            <p className="truncate text-[11px] text-slate-400">
-              {isOwner ? "Owner" : `Admin · ${profile?.team?.nama ?? "-"}`}
-            </p>
-          </div>
+          {!collapsed && (
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold">{profile?.nama_lengkap}</p>
+              <p className="truncate text-[11px] text-slate-400">
+                {isOwner ? "Owner" : `Admin · ${profile?.team?.nama ?? "-"}`}
+              </p>
+            </div>
+          )}
           <button
             onClick={() => signOut()}
             title="Keluar"
-            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+            className={`rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white ${
+              collapsed ? "" : "ml-auto"
+            }`}
           >
             <ArrowRightStartOnRectIcon className="h-5 w-5" />
           </button>
@@ -89,10 +134,19 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(STORAGE_KEY) === "1";
+  });
   const location = useLocation();
   const { profile } = useAuth();
   const isOwner = profile?.role === "OWNER";
   const initials = (profile?.nama_lengkap ?? "?").slice(0, 2).toUpperCase();
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, collapsed ? "1" : "0");
+  }, [collapsed]);
+
   const current = nav.find((n) =>
     n.end ? location.pathname === n.to : location.pathname.startsWith(n.to)
   );
@@ -100,11 +154,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-bg-main">
       {/* Sidebar desktop */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 lg:block">
-        <SidebarContent />
+      <aside
+        className={`fixed inset-y-0 left-0 z-30 hidden transition-all duration-200 lg:block ${
+          collapsed ? "w-[76px]" : "w-64"
+        }`}
+      >
+        <SidebarContent collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
       </aside>
 
-      {/* Sidebar mobile */}
+      {/* Sidebar mobile (selalu lebar) */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div
@@ -112,13 +170,21 @@ export function AppLayout({ children }: { children: ReactNode }) {
             onClick={() => setMobileOpen(false)}
           />
           <aside className="absolute inset-y-0 left-0 w-64 shadow-2xl">
-            <SidebarContent onNavigate={() => setMobileOpen(false)} />
+            <SidebarContent
+              collapsed={false}
+              onToggle={() => setMobileOpen(false)}
+              onNavigate={() => setMobileOpen(false)}
+            />
           </aside>
         </div>
       )}
 
       {/* Konten */}
-      <div className="lg:pl-64">
+      <div
+        className={`transition-all duration-200 ${
+          collapsed ? "lg:pl-[76px]" : "lg:pl-64"
+        }`}
+      >
         {/* Topbar */}
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/85 backdrop-blur-xl">
           <div className="flex items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
@@ -127,6 +193,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 onClick={() => setMobileOpen(true)}
                 className="rounded-lg border border-slate-200 p-2 text-text-secondary lg:hidden"
                 aria-label="Buka menu"
+              >
+                <Bars3Icon className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => setCollapsed((c) => !c)}
+                className="hidden rounded-lg border border-slate-200 p-2 text-text-secondary transition-colors hover:bg-bg-main hover:text-text-main lg:block"
+                aria-label={collapsed ? "Perluas sidebar" : "Minimize sidebar"}
+                title={collapsed ? "Perluas sidebar" : "Minimize sidebar"}
               >
                 <Bars3Icon className="h-5 w-5" />
               </button>

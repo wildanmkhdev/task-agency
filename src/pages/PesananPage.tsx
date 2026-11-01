@@ -15,7 +15,7 @@ import {
 } from "../components/ui";
 
 const PESANAN_SELECT =
-  "id, kode, harga, status, dibayar, fisk, tanggal, jumlah_keterangan, team_id, customer:customers(nama), penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama), team:teams(nama)";
+  "id, kode, harga, fee_admin, fee_penjoki, status, dibayar, fisk, tanggal, jumlah_keterangan, team_id, customer:customers(nama), penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama), team:teams(nama)";
 
 const FILTERS: { key: "SEMUA" | PesananStatus; label: string }[] = [
   { key: "SEMUA", label: "Semua" },
@@ -77,6 +77,8 @@ export function PesananPage() {
     { key: "penjoki", label: "Penjoki", render: (r) => String(r.penjoki) },
     ...(isOwner ? [{ key: "tim", label: "Tim", render: (r: Record<string, unknown>) => String(r.tim) }] : []),
     { key: "harga", label: "Payment Customer", currency: true },
+    { key: "fee_admin", label: "Fee Admin (50%)", currency: true },
+    { key: "fee_penjoki", label: "Fee Penjoki (50%)", currency: true },
     { key: "status", label: "Status", render: (r) => String(r.status) },
   ];
 
@@ -88,6 +90,8 @@ export function PesananPage() {
     penjoki: p.penjoki?.nama ?? "-",
     tim: p.team?.nama ?? "-",
     harga: p.harga,
+    fee_admin: p.fee_admin,
+    fee_penjoki: p.fee_penjoki,
     status: FILTERS.find((f) => f.key === p.status)?.label ?? p.status,
   }));
 
@@ -163,6 +167,9 @@ export function PesananPage() {
                       )}
                       <td className="px-4 py-3 text-right font-extrabold tabular-nums">
                         {rupiah(p.harga)}
+                        <p className="mt-0.5 text-[11px] font-medium text-text-muted">
+                          Admin {rupiah(p.fee_admin)} · Penjoki {rupiah(p.fee_penjoki)}
+                        </p>
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={p.status} />

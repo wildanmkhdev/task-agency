@@ -40,3 +40,5 @@ supabase/.branches/
 
 # File akun seed (password)
 akun_seed*
+.vercel
+.env*

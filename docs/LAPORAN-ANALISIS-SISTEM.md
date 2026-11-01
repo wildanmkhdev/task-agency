@@ -21,10 +21,14 @@ Bahan yang diterima berupa **4 gambar mockup hasil AI** dan **1 PDF rekap data p
 | D2 | Setiap tim punya **1 admin** | ✅ Konfirmasi | 1 Nov 2026 |
 | D3 | **Export PDF & Excel** untuk laporan/rekap/transaksi | ✅ Konfirmasi | 1 Nov 2026 |
 | D4 | Arah desain kanonik | ✅ **Putuskan**: ikuti **color palette landing page** `jokitugasaja.my.id` (light theme, navy + sky blue) — TIDAK pakai hijau-emas | 1 Nov 2026 |
-| D5 | Rumus fee owner vs admin CS (%) | ⏳ Menunggu client | — |
+| D5 | **Rumus fee per transaksi**: **50% Admin CS + 50% Penjoki** (dari harga customer) | ✅ Konfirmasi | 1 Nov 2026 |
 | D6 | Definisi & formula "fisk" + Rate Keaktifan | ⏳ Menunggu client | — |
 | D7 | Data Tim 1 & Tim 2 (dari PDF) | ⏳ Menunggu client | — |
 | D8 | Apakah penjoki punya login sendiri | ⏳ Menunggu client | — |
+| D9 | **Sidebar bisa di-minimize** menjadi icon rail (persist di localStorage) | ✅ Konfirmasi | 1 Nov 2026 |
+
+> **Catatan D5:** 50% + 50% = 100% harga customer — **fee owner tidak bersumber dari split ini**.
+> Jika owner mengambil fee, perlu sumber/aturan tambahan (mis. potongan di luar transaksi atau % tersendiri). Masih menunggu klarifikasi client.
 
 ---
 

@@ -117,6 +117,23 @@ export function BanknotesIcon(p: P) {
   );
 }
 
+/** Panah ganda — toggle sidebar minimize */
+export function ChevronDoubleLeftIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <path d="M11.25 4.5l-7.5 7.5 7.5 7.5M18.75 4.5l-7.5 7.5 7.5 7.5" />
+    </svg>
+  );
+}
+
+export function ChevronDoubleRightIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <path d="M12.75 4.5l7.5 7.5-7.5 7.5M5.25 4.5l7.5 7.5-7.5 7.5" />
+    </svg>
+  );
+}
+
 export function UserGroupIcon(p: P) {
   return (
     <svg {...base} {...p}>

@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useScope } from "../hooks/useScope";
 import { kodeTransaksi } from "../lib/format";
+import { hitungFee } from "../lib/fee";
 import type { Customer, JenisTugas, Penjoki, Team } from "../lib/types";
 import { Button, Card, Field, Spinner, inputCls } from "../components/ui";
 
@@ -101,6 +102,7 @@ export function TambahPesananPage() {
         if (!custId) throw new Error("Customer wajib dipilih.");
       }
 
+      const { feeAdmin, feePenjoki } = hitungFee(hargaNum);
       const { error } = await supabase.from("pesanan").insert({
         kode: kodeTransaksi(),
         team_id: scopedTeamId,
@@ -108,6 +110,9 @@ export function TambahPesananPage() {
         jenis_tugas_id: jenisId,
         penjoki_id: penjokiId,
         harga: hargaNum,
+        // D5: fee 50% Admin CS + 50% Penjoki
+        fee_admin: feeAdmin,
+        fee_penjoki: feePenjoki,
         jumlah_keterangan: jumlah.trim(),
         catatan: catatan.trim() || null,
         status: "MENUNGU",
