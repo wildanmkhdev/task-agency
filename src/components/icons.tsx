@@ -198,3 +198,22 @@ export function UserGroupIcon(p: P) {
     </svg>
   );
 }
+
+/** Dompet — gaji penjoki */
+export function WalletIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <path d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" />
+    </svg>
+  );
+}
+
+/** Koin / $ — bagian agency (owner) */
+export function CurrencyDollarIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <path d="M12 6v12m-2.25-2.25h4.5a2.25 2.25 0 000-4.5h-4.5a2.25 2.25 0 000 4.5zm0 0a2.25 2.25 0 002.25 2.25h2.25" />
+      <circle cx="12" cy="12" r="9" />
+    </svg>
+  );
+}

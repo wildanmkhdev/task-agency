@@ -7,12 +7,14 @@ import {
   BanknotesIcon,
   CheckCircleIcon,
   ClockIcon,
+  CurrencyDollarIcon,
   UserGroupIcon,
+  WalletIcon,
 } from "../components/icons";
 import { Card, EmptyState, Spinner, StatCard, StatusBadge, TeamTabs } from "../components/ui";
 
 const PESANAN_SELECT =
-  "id, kode, harga, status, dibayar, fisk, tanggal, team_id, customer:customers(nama), penjoki:penjoki(nama), team:teams(nama)";
+  "id, kode, harga, fee_admin, fee_owner, fee_penjoki, status, dibayar, fisk, tanggal, team_id, customer:customers(nama), penjoki:penjoki(nama), team:teams(nama)";
 
 export function DashboardPage() {
   const { isOwner, teams, teamFilter, setTeamFilter, applyScope } = useScope();
@@ -49,6 +51,11 @@ export function DashboardPage() {
   const selesai = rows.filter(masukRekap);
   const pendapatan = selesai.reduce((s, p) => s + p.harga, 0);
   const menunggu = rows.filter((p) => p.status === "MENUNGU").length;
+  // Gaji dari fee yang tercatat di tugas masuk rekap (D5: penjoki 50% + owner 50%,
+  // fee admin diisi manual owner dan TIDAK ikut potongan 50/50)
+  const gajiPenjoki = selesai.reduce((s, p) => s + (p.fee_penjoki ?? 0), 0);
+  const untungOwner = selesai.reduce((s, p) => s + (p.fee_owner ?? 0), 0);
+  const totalFeeAdmin = selesai.reduce((s, p) => s + (p.fee_admin ?? 0), 0);
 
   // Rekap ringkas per tim (khusus owner, semua tim)
   const perTim = teams.map((t) => {
@@ -58,6 +65,8 @@ export function DashboardPage() {
       ...t,
       selesai: selesaiTim.length,
       pendapatan: selesaiTim.reduce((s, p) => s + p.harga, 0),
+      gajiPenjoki: selesaiTim.reduce((s, p) => s + (p.fee_penjoki ?? 0), 0),
+      untungOwner: selesaiTim.reduce((s, p) => s + (p.fee_owner ?? 0), 0),
     };
   });
 
@@ -77,7 +86,7 @@ export function DashboardPage() {
       </div>
 
       {/* KPI */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard
           label="Total Tugas Selesai"
           value={String(selesai.length)}
@@ -106,6 +115,24 @@ export function DashboardPage() {
           icon={<ClockIcon className="h-6 w-6" />}
           accent="warning"
         />
+        <StatCard
+          label="Gaji Penjoki"
+          value={rupiah(gajiPenjoki)}
+          sub={`50% dari harga · ${selesai.length} tugas selesai`}
+          icon={<WalletIcon className="h-6 w-6" />}
+          accent="navy"
+        />
+        <StatCard
+          label={isOwner ? "Untuk Agency (Owner)" : "Untuk Agency"}
+          value={rupiah(untungOwner)}
+          sub={
+            totalFeeAdmin > 0
+              ? `sisa 50% · fee admin tercatat ${rupiah(totalFeeAdmin)}`
+              : "sisa 50% dari harga tugas"
+          }
+          icon={<CurrencyDollarIcon className="h-6 w-6" />}
+          accent="success"
+        />
       </div>
 
       {/* Filter tim (owner) */}
@@ -132,6 +159,8 @@ export function DashboardPage() {
                   <th className="px-5 py-3 font-bold">Tim</th>
                   <th className="px-5 py-3 text-right font-bold">Tugas Selesai</th>
                   <th className="px-5 py-3 text-right font-bold">Pendapatan</th>
+                  <th className="px-5 py-3 text-right font-bold">Gaji Penjoki</th>
+                  <th className="px-5 py-3 text-right font-bold">Untuk Agency</th>
                 </tr>
               </thead>
               <tbody>
@@ -141,6 +170,12 @@ export function DashboardPage() {
                     <td className="px-5 py-3 text-right tabular-nums">{t.selesai}</td>
                     <td className="px-5 py-3 text-right font-semibold tabular-nums">
                       {rupiah(t.pendapatan)}
+                    </td>
+                    <td className="px-5 py-3 text-right tabular-nums text-text-secondary">
+                      {rupiah(t.gajiPenjoki)}
+                    </td>
+                    <td className="px-5 py-3 text-right font-semibold tabular-nums text-success">
+                      {rupiah(t.untungOwner)}
                     </td>
                   </tr>
                 ))}
