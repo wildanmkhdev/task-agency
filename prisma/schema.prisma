@@ -1,0 +1,152 @@
+// ============================================================
+// JokiTugasAja_ID — Skema Database (PostgreSQL / Supabase)
+// Sumber keputusan: LAPORAN-ANALISIS-SISTEM.md
+//  - D1: Owner lihat semua tim; Admin hanya timnya (enforce via RLS)
+//  - D2: 1 admin per tim
+//  - D3: export PDF & Excel (client-side)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// Peran pengguna aplikasi (penjoki tidak login — lihat D8)
+enum Role {
+  OWNER
+  ADMIN
+  @@map("role")
+}
+
+/// Status lifecycle pesanan:
+/// MENUNGU → DIKERJAKAN → SELESAI (hanya masuk rekap bila pembayaran + fisk beres)
+enum PesananStatus {
+  MENUNGU
+  DIKERJAKAN
+  SELESAI
+  BATAL
+  @@map("pesanan_status")
+}
+
+/// Tim penjoki — Tim 1..5 (sumber: PDF rekap data penjoki)
+model Team {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nama      String    @unique // "Tim 1" .. "Tim 5"
+  profiles  Profile[]
+  customers Customer[]
+  penjoki   Penjoki[]
+  pesanan   Pesanan[]
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("teams")
+}
+
+/// Pengguna sistem: Owner & Admin (satu admin terikat satu tim — D2)
+/// id = auth.users.id (disinkronkan oleh trigger handle_new_user)
+model Profile {
+  id          String   @id @db.Uuid // = auth.users.id
+  role        Role
+  teamId      String?  @map("team_id") @db.Uuid // null untuk Owner
+  team        Team?    @relation(fields: [teamId], references: [id])
+  namaLengkap String   @map("nama_lengkap")
+  noHp        String?  @map("no_hp")
+  aktif       Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  pesananDibuat Pesanan[] @relation("DibuatOleh")
+
+  @@index([teamId])
+  @@map("profiles")
+}
+
+/// Master jenis tugas (dropdown pada form pesanan)
+model JenisTugas {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nama      String    @unique
+  aktif     Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at")
+  pesanan   Pesanan[]
+
+  @@map("jenis_tugas")
+}
+
+/// Customer (nama + WA + catatan) — milik tim
+model Customer {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nama      String
+  noWa      String    @map("no_wa")
+  catatan   String?
+  teamId    String    @map("team_id") @db.Uuid
+  team      Team      @relation(fields: [teamId], references: [id])
+  createdAt DateTime  @default(now()) @map("created_at")
+  pesanan   Pesanan[]
+
+  @@index([teamId, nama])
+  @@map("customers")
+}
+
+/// Penjoki (tidak login) — data dari PDF rekap + input admin/owner
+model Penjoki {
+  id     String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nama   String
+  noHp   String? @map("no_hp")
+  teamId String  @map("team_id") @db.Uuid
+  team   Team    @relation(fields: [teamId], references: [id])
+  /// Rating kemampuan dari PDF (0–100, boleh desimal) — METRIK BERBEDA dari Rate Keaktifan
+  ratingSkill Float? @map("rating_skill")
+  /// Keahlian (mis. "Laporan PKL", "PPT", "Makalah") — multi-tag
+  keahlian String[]
+  /// Catatan kualitatif (ketersediaan, batasan, dll.)
+  keterangan String?
+  aktif      Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  pesanan    Pesanan[]
+
+  @@index([teamId, aktif])
+  @@map("penjoki")
+}
+
+/// Pesanan/Transaksi inti bisnis
+model Pesanan {
+  id     String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Kode transaksi tampilan, mis. "TRX-20261101-A1B2" (unique)
+  kode   String        @unique
+  /// Tim pemilik pesanan (dari admin pembuat / pilihan owner) — dasar scoping D1
+  teamId String        @map("team_id") @db.Uuid
+  team   Team          @relation(fields: [teamId], references: [id])
+  customerId   String     @map("customer_id") @db.Uuid
+  customer     Customer   @relation(fields: [customerId], references: [id])
+  jenisTugasId String     @map("jenis_tugas_id") @db.Uuid
+  jenisTugas   JenisTugas @relation(fields: [jenisTugasId], references: [id])
+  penjokiId    String     @map("penjoki_id") @db.Uuid
+  penjoki      Penjoki    @relation(fields: [penjokiId], references: [id])
+  /// Harga ke customer (Rp, integer)
+  harga Int
+  /// Jumlah/keterangan, mis. "1 laporan", "3 bab"
+  jumlahKeterangan String @map("jumlah_keterangan")
+  catatan  String?
+  status   PesananStatus @default(MENUNGU)
+  /// Pembayaran customer sudah masuk?
+  dibayar  Boolean @default(false)
+  /// Bukti "fisk" sudah diterima? (istilah client — lihat D6)
+  fisk     Boolean @default(false)
+  selesaiAt DateTime? @map("selesai_at")
+  tanggal  DateTime @default(now())
+  /// Admin yang membuat pesanan
+  dibuatOleh        String    @map("dibuat_oleh") @db.Uuid
+  dibuatOlehProfile Profile  @relation("DibuatOleh", fields: [dibuatOleh], references: [id])
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([teamId, tanggal])
+  @@index([penjokiId, tanggal])
+  @@index([status])
+  @@map("pesanan")
+}

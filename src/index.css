@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Design System — JokiTugasAja_ID
+   Sumber: palette resmi landing page https://www.jokitugasaja.my.id/
+   (lihat LAPORAN-ANALISIS-SISTEM.md §4b)
+   ============================================================ */
+@theme {
+  --font-display: "Outfit", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --color-bg-main: #f8fafc;
+  --color-text-main: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+
+  --color-navy: #0e294b;
+  --color-navy-light: #163861;
+
+  --color-brand: #0284c7;
+  --color-brand-hover: #0369a1;
+  --color-brand-soft: #f0f9ff;
+  --color-brand-border: #bae6fd;
+
+  --color-wa: #25d366;
+  --color-wa-dark: #16a34a;
+
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-warning-soft: #fffbeb;
+  --color-warning-border: #fef3c7;
+  --color-danger: #ef4444;
+  --color-orange: #f97316;
+
+  --radius-card: 20px;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg-main);
+  color: var(--color-text-main);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+}
+
+/* Scrollbar tipis ala landing page */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
