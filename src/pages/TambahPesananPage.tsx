@@ -6,7 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { useScope } from "../hooks/useScope";
 import { kodeTransaksi, rupiah, yyyyMmDd } from "../lib/format";
 import { hitungFee } from "../lib/fee";
-import type { Customer, JenisTugas, Penjoki, Team } from "../lib/types";
+import type { Customer, JenisTugas, Penjoki, PesananStatus, Team } from "../lib/types";
 import { Button, Card, Field, Spinner, inputCls } from "../components/ui";
 
 /**
@@ -28,6 +28,8 @@ export function TambahPesananPage() {
   );
   /** Tanggal pesanan — default hari ini, boleh dipilih lampau (backfill rekap) */
   const [tanggal, setTanggal] = useState<string>(yyyyMmDd(new Date()));
+  /** Status awal — sinkron dengan kategori filter di Daftar Pesanan */
+  const [fStatus, setFStatus] = useState<PesananStatus>("MENUNGU");
   const [customerMode, setCustomerMode] = useState<"pilih" | "baru">("pilih");
   const [customerId, setCustomerId] = useState("");
   const [custNama, setCustNama] = useState("");
@@ -145,7 +147,9 @@ export function TambahPesananPage() {
         catatan: catatan.trim() || null,
         // Tanggal bisa lampau (backfill rekap) — dilihat semua peran dari kolom ini
         tanggal: tanggalIso,
-        status: "MENUNGU",
+        status: fStatus,
+        // Kalau langsung dinyatakan selesai, catat waktu selesai-nya juga
+        ...(fStatus === "SELESAI" ? { selesai_at: new Date().toISOString() } : {}),
         dibuat_oleh: profile!.id,
       });
       if (error) throw error;
@@ -403,6 +407,29 @@ export function TambahPesananPage() {
               onChange={(e) => setCatatan(e.target.value)}
               className={inputCls}
             />
+          </Field>
+
+          {/* Status awal — sinkron dengan kategori filter di Daftar Pesanan */}
+          <Field
+            label="Status"
+            hint={
+              fStatus === "SELESAI"
+                ? "Langsung dicatat selesai. Masuk rekap bila pembayaran & fisk sudah ditandai di Daftar Pesanan."
+                : fStatus === "BATAL"
+                  ? "Pesanan batal — tidak masuk rekap."
+                  : "Default: Menunggu. Bisa diubah sewaktu-waktu di Daftar Pesanan."
+            }
+          >
+            <select
+              value={fStatus}
+              onChange={(e) => setFStatus(e.target.value as PesananStatus)}
+              className={inputCls}
+            >
+              <option value="MENUNGU">Menunggu</option>
+              <option value="DIKERJAKAN">Dikerjakan</option>
+              <option value="SELESAI">Selesai</option>
+              <option value="BATAL">Batal</option>
+            </select>
           </Field>
 
           {error && (
