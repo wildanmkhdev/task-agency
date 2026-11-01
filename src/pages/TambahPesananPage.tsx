@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useScope } from "../hooks/useScope";
-import { kodeTransaksi, rupiah } from "../lib/format";
+import { kodeTransaksi, rupiah, yyyyMmDd } from "../lib/format";
 import { hitungFee } from "../lib/fee";
 import type { Customer, JenisTugas, Penjoki, Team } from "../lib/types";
 import { Button, Card, Field, Spinner, inputCls } from "../components/ui";
@@ -13,6 +13,9 @@ import { Button, Card, Field, Spinner, inputCls } from "../components/ui";
  * Form Tambah Pesanan (mockup biru layar 3).
  * - Admin: tim terkunci = timnya sendiri.
  * - Owner: memilih tim untuk pesanan ini.
+ * - Tanggal bisa dipilih (boleh lampau) — untuk input ulang / rekap telat.
+ *   Disimpan ke kolom `tanggal` yang sama → terlihat identik di Rekap
+ *   Harian & Daftar Pesanan untuk owner maupun semua admin (satu data).
  */
 export function TambahPesananPage() {
   const { profile } = useAuth();
@@ -23,6 +26,8 @@ export function TambahPesananPage() {
   const [teamId, setTeamId] = useState<string>(
     !isOwner ? (profile?.team_id ?? "") : (teams[0]?.id ?? "")
   );
+  /** Tanggal pesanan — default hari ini, boleh dipilih lampau (backfill rekap) */
+  const [tanggal, setTanggal] = useState<string>(yyyyMmDd(new Date()));
   const [customerMode, setCustomerMode] = useState<"pilih" | "baru">("pilih");
   const [customerId, setCustomerId] = useState("");
   const [custNama, setCustNama] = useState("");
@@ -87,6 +92,9 @@ export function TambahPesananPage() {
       const hargaNum = Number(harga);
       if (!Number.isFinite(hargaNum) || hargaNum <= 0) throw new Error("Harga tidak valid.");
       if (!jumlah.trim()) throw new Error("Jumlah/keterangan wajib diisi.");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) throw new Error("Tanggal tidak valid.");
+      // Tengah malam waktu lokal → konsisten dengan filter Rekap Harian (lihat catatan TZ)
+      const tanggalIso = new Date(`${tanggal}T00:00:00`).toISOString();
 
       // Customer: pilih existing atau buat baru
       let custId = customerId;
@@ -128,6 +136,8 @@ export function TambahPesananPage() {
         fee_penjoki: feePenjoki,
         jumlah_keterangan: jumlah.trim(),
         catatan: catatan.trim() || null,
+        // Tanggal bisa lampau (backfill rekap) — dilihat semua peran dari kolom ini
+        tanggal: tanggalIso,
         status: "MENUNGU",
         dibuat_oleh: profile!.id,
       });
@@ -188,6 +198,19 @@ export function TambahPesananPage() {
               </select>
             </Field>
           )}
+
+          {/* Tanggal pesanan — boleh lampau untuk input/rekap ulang */}
+          <Field
+            label="Tanggal Pesanan"
+            hint="Boleh pilih tanggal lampau — data langsung masuk rekap hari itu (terlihat sama untuk owner & admin)."
+          >
+            <input
+              type="date"
+              value={tanggal}
+              onChange={(e) => setTanggal(e.target.value)}
+              className={inputCls}
+            />
+          </Field>
 
           {/* Customer */}
           <div className="rounded-xl border border-slate-200 bg-bg-main p-4">
