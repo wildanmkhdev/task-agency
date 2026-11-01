@@ -15,7 +15,7 @@ import {
 } from "../components/ui";
 
 const PESANAN_SELECT =
-  "id, kode, harga, fee_admin, fee_penjoki, status, dibayar, fisk, tanggal, jumlah_keterangan, team_id, customer:customers(nama), penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama), team:teams(nama)";
+  "id, kode, harga, fee_admin, fee_owner, fee_penjoki, status, dibayar, fisk, tanggal, jumlah_keterangan, team_id, customer:customers(nama), penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama), team:teams(nama)";
 
 const FILTERS: { key: "SEMUA" | PesananStatus; label: string }[] = [
   { key: "SEMUA", label: "Semua" },
@@ -52,7 +52,7 @@ export function PesananPage() {
       patch,
     }: {
       id: string;
-      patch: Partial<Pick<Pesanan, "status" | "dibayar" | "fisk" | "selesai_at">>;
+      patch: Partial<Pick<Pesanan, "status" | "dibayar" | "fisk" | "selesai_at" | "fee_admin">>;
     }) => {
       const { error } = await supabase.from("pesanan").update(patch).eq("id", id);
       if (error) throw error;
@@ -77,8 +77,9 @@ export function PesananPage() {
     { key: "penjoki", label: "Penjoki", render: (r) => String(r.penjoki) },
     ...(isOwner ? [{ key: "tim", label: "Tim", render: (r: Record<string, unknown>) => String(r.tim) }] : []),
     { key: "harga", label: "Payment Customer", currency: true },
-    { key: "fee_admin", label: "Fee Admin (50%)", currency: true },
     { key: "fee_penjoki", label: "Fee Penjoki (50%)", currency: true },
+    { key: "fee_owner", label: "Fee Owner (50%)", currency: true },
+    { key: "fee_admin", label: "Fee Admin (manual)", currency: true },
     { key: "status", label: "Status", render: (r) => String(r.status) },
   ];
 
@@ -91,6 +92,7 @@ export function PesananPage() {
     tim: p.team?.nama ?? "-",
     harga: p.harga,
     fee_admin: p.fee_admin,
+    fee_owner: p.fee_owner,
     fee_penjoki: p.fee_penjoki,
     status: FILTERS.find((f) => f.key === p.status)?.label ?? p.status,
   }));
@@ -168,8 +170,38 @@ export function PesananPage() {
                       <td className="px-4 py-3 text-right font-extrabold tabular-nums">
                         {rupiah(p.harga)}
                         <p className="mt-0.5 text-[11px] font-medium text-text-muted">
-                          Admin {rupiah(p.fee_admin)} · Penjoki {rupiah(p.fee_penjoki)}
+                          Penjoki {rupiah(p.fee_penjoki)} · Owner {rupiah(p.fee_owner)}
                         </p>
+                        {isOwner ? (
+                          <span
+                            className="mt-1 flex items-center justify-end gap-1 text-[11px] font-medium text-text-muted"
+                            title="Fee admin — diisi manual oleh owner (D5)"
+                          >
+                            Admin
+                            <input
+                              type="number"
+                              min={0}
+                              defaultValue={p.fee_admin || ""}
+                              placeholder="0"
+                              onBlur={(e) => {
+                                const raw = e.target.value.trim();
+                                const v = raw === "" ? 0 : Number(raw);
+                                if (Number.isFinite(v) && v >= 0 && v !== p.fee_admin)
+                                  update.mutate({
+                                    id: p.id,
+                                    patch: { fee_admin: v },
+                                  });
+                              }}
+                              className="w-24 rounded-md border border-slate-200 px-1.5 py-0.5 text-right text-[11px] font-bold tabular-nums text-text-main outline-none focus:border-brand"
+                            />
+                          </span>
+                        ) : (
+                          p.fee_admin > 0 && (
+                            <p className="mt-0.5 text-[11px] font-medium text-text-muted">
+                              Admin {rupiah(p.fee_admin)}
+                            </p>
+                          )
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={p.status} />

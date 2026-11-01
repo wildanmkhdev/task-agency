@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useScope } from "../hooks/useScope";
-import { kodeTransaksi } from "../lib/format";
+import { kodeTransaksi, rupiah } from "../lib/format";
 import { hitungFee } from "../lib/fee";
 import type { Customer, JenisTugas, Penjoki, Team } from "../lib/types";
 import { Button, Card, Field, Spinner, inputCls } from "../components/ui";
@@ -29,6 +29,8 @@ export function TambahPesananPage() {
   const [custWa, setCustWa] = useState("");
   const [jenisId, setJenisId] = useState("");
   const [harga, setHarga] = useState("");
+  /** Fee admin — diisi manual oleh OWNER (D5), bukan formula */
+  const [feeAdminManual, setFeeAdminManual] = useState("");
   const [penjokiId, setPenjokiId] = useState("");
   const [jumlah, setJumlah] = useState("");
   const [catatan, setCatatan] = useState("");
@@ -102,7 +104,17 @@ export function TambahPesananPage() {
         if (!custId) throw new Error("Customer wajib dipilih.");
       }
 
-      const { feeAdmin, feePenjoki } = hitungFee(hargaNum);
+      // Fee admin manual (khusus owner, D5) — validasi angka
+      let feeAdminManualNum = 0;
+      if (isOwner && feeAdminManual.trim()) {
+        feeAdminManualNum = Number(feeAdminManual);
+        if (!Number.isFinite(feeAdminManualNum) || feeAdminManualNum < 0)
+          throw new Error("Fee admin tidak valid (harus angka ≥ 0).");
+        if (feeAdminManualNum > hargaNum)
+          throw new Error("Fee admin melebihi harga customer.");
+      }
+
+      const { feeOwner, feePenjoki } = hitungFee(hargaNum);
       const { error } = await supabase.from("pesanan").insert({
         kode: kodeTransaksi(),
         team_id: scopedTeamId,
@@ -110,8 +122,9 @@ export function TambahPesananPage() {
         jenis_tugas_id: jenisId,
         penjoki_id: penjokiId,
         harga: hargaNum,
-        // D5: fee 50% Admin CS + 50% Penjoki
-        fee_admin: feeAdmin,
+        // D5 final: penjoki 50% + owner 50% (otomatis); fee admin = manual owner
+        fee_admin: feeAdminManualNum,
+        fee_owner: feeOwner,
         fee_penjoki: feePenjoki,
         jumlah_keterangan: jumlah.trim(),
         catatan: catatan.trim() || null,
@@ -263,6 +276,46 @@ export function TambahPesananPage() {
               />
             </Field>
           </div>
+
+          {/* Preview fee otomatis (D5: 50% penjoki + 50% owner) */}
+          {Number(harga) > 0 && (
+            <div className="rounded-xl border border-brand-border bg-brand-soft px-4 py-3 text-sm">
+              <p className="mb-1 text-xs font-bold uppercase tracking-wide text-brand">
+                Pembagian Fee (otomatis)
+              </p>
+              <div className="flex flex-wrap gap-x-6 gap-y-1 tabular-nums">
+                <span className="text-text-secondary">
+                  Penjoki (50%):{" "}
+                  <strong className="text-text-main">
+                    {rupiah(hitungFee(Number(harga)).feePenjoki)}
+                  </strong>
+                </span>
+                <span className="text-text-secondary">
+                  Owner (50%):{" "}
+                  <strong className="text-text-main">
+                    {rupiah(hitungFee(Number(harga)).feeOwner)}
+                  </strong>
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Fee admin manual — hanya owner yang mengisi (D5) */}
+          {isOwner && (
+            <Field
+              label="Fee Admin (Rp) — isi manual"
+              hint="Owner menghitung sendiri; kosongkan bila tidak ada. Tidak ikut hitungan 50/50."
+            >
+              <input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={feeAdminManual}
+                onChange={(e) => setFeeAdminManual(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+          )}
 
           {/* Penjoki */}
           <Field

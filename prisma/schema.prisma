@@ -129,9 +129,11 @@ model Pesanan {
   penjoki      Penjoki    @relation(fields: [penjokiId], references: [id])
   /// Harga ke customer (Rp, integer)
   harga Int
-  /// Fee Admin CS (D5: 50% dari harga)
+  /// Fee Admin CS — ISI MANUAL oleh owner per transaksi (bukan formula; D5)
   feeAdmin Int @default(0) @map("fee_admin")
-  /// Fee Penjoki (D5: 50% dari harga)
+  /// Fee Owner (D5 final: otomatis 50% dari harga)
+  feeOwner Int @default(0) @map("fee_owner")
+  /// Fee Penjoki (D5 final: otomatis 50% dari harga)
   feePenjoki Int @default(0) @map("fee_penjoki")
   /// Jumlah/keterangan, mis. "1 laporan", "3 bab"
   jumlahKeterangan String @map("jumlah_keterangan")

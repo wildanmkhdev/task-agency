@@ -21,14 +21,15 @@ Bahan yang diterima berupa **4 gambar mockup hasil AI** dan **1 PDF rekap data p
 | D2 | Setiap tim punya **1 admin** | ✅ Konfirmasi | 1 Nov 2026 |
 | D3 | **Export PDF & Excel** untuk laporan/rekap/transaksi | ✅ Konfirmasi | 1 Nov 2026 |
 | D4 | Arah desain kanonik | ✅ **Putuskan**: ikuti **color palette landing page** `jokitugasaja.my.id` (light theme, navy + sky blue) — TIDAK pakai hijau-emas | 1 Nov 2026 |
-| D5 | **Rumus fee per transaksi**: **50% Admin CS + 50% Penjoki** (dari harga customer) | ✅ Konfirmasi | 1 Nov 2026 |
+| D5 | **Rumus fee per transaksi (FINAL)**: **50% Penjoki + 50% Owner** (otomatis dari harga customer) — **fee admin bukan dari split**, dihitung & **diisi manual oleh owner** per transaksi | ✅ Konfirmasi final | 1 Nov 2026 |
 | D6 | Definisi & formula "fisk" + Rate Keaktifan | ⏳ Menunggu client | — |
 | D7 | Data Tim 1 & Tim 2 (dari PDF) | ⏳ Menunggu client | — |
 | D8 | Apakah penjoki punya login sendiri | ⏳ Menunggu client | — |
 | D9 | **Sidebar bisa di-minimize** menjadi icon rail (persist di localStorage) | ✅ Konfirmasi | 1 Nov 2026 |
 
-> **Catatan D5:** 50% + 50% = 100% harga customer — **fee owner tidak bersumber dari split ini**.
-> Jika owner mengambil fee, perlu sumber/aturan tambahan (mis. potongan di luar transaksi atau % tersendiri). Masih menunggu klarifikasi client.
+> **Catatan D5:** Split 50/50 = 100% harga customer → **penjoki + owner**.
+> Kolom `fee_penjoki` & `fee_owner` dihitung **otomatis** saat pesanan dibuat (pembulatan ke penjoki, sisa ke owner).
+> `fee_admin` **diisi manual oleh owner**: lewat form Tambah Pesanan (khusus owner) atau edit inline di kolom fee pada Daftar Pesanan; default 0 bila belum diisi.
 
 ---
 
