@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
 import { rupiah, tanggalPendek } from "../lib/format";
-import type { Pesanan, PesananStatus } from "../lib/types";
+import type { Pesanan, PesananStatus, StatusBayar } from "../lib/types";
 import { ExportButtons, type ExportColumn } from "../components/ExportButtons";
 import {
   Button,
@@ -15,7 +15,7 @@ import {
 } from "../components/ui";
 
 const PESANAN_SELECT =
-  "id, kode, harga, fee_admin, fee_owner, fee_penjoki, status, dibayar, fisk, tanggal, jumlah_keterangan, team_id, customer:customers(nama), penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama), team:teams(nama)";
+  "id, kode, harga, fee_admin, fee_owner, fee_penjoki, status, status_bayar, tanggal, jumlah_keterangan, team_id, customer:customers(nama), penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama), team:teams(nama)";
 
 const FILTERS: { key: "SEMUA" | PesananStatus; label: string }[] = [
   { key: "SEMUA", label: "Semua" },
@@ -23,6 +23,13 @@ const FILTERS: { key: "SEMUA" | PesananStatus; label: string }[] = [
   { key: "DIKERJAKAN", label: "Dikerjakan" },
   { key: "SELESAI", label: "Selesai" },
   { key: "BATAL", label: "Batal" },
+];
+
+/** Opsi dropdown status pembayaran (menggantikan toggle dibayar + fisk) */
+const OpsiBayar: { value: StatusBayar; label: string }[] = [
+  { value: "BELUM", label: "Belum Bayar" },
+  { value: "CICIL", label: "Cicil" },
+  { value: "LUNAS", label: "Lunas" },
 ];
 
 /** Daftar Pesanan + kendali lifecycle (D1 scoping berlaku via RLS) */
@@ -52,7 +59,9 @@ export function PesananPage() {
       patch,
     }: {
       id: string;
-      patch: Partial<Pick<Pesanan, "status" | "dibayar" | "fisk" | "selesai_at" | "fee_admin">>;
+      patch: Partial<
+        Pick<Pesanan, "status" | "status_bayar" | "selesai_at" | "fee_admin">
+      >;
     }) => {
       const { error } = await supabase.from("pesanan").update(patch).eq("id", id);
       if (error) throw error;
@@ -81,6 +90,7 @@ export function PesananPage() {
     { key: "fee_owner", label: "Fee Owner (50%)", currency: true },
     { key: "fee_admin", label: "Fee Admin (manual)", currency: true },
     { key: "status", label: "Status", render: (r) => String(r.status) },
+    { key: "status_bayar", label: "Status Bayar", render: (r) => String(r.status_bayar) },
   ];
 
   const exportRows = list.map((p) => ({
@@ -95,6 +105,7 @@ export function PesananPage() {
     fee_owner: p.fee_owner,
     fee_penjoki: p.fee_penjoki,
     status: FILTERS.find((f) => f.key === p.status)?.label ?? p.status,
+    status_bayar: OpsiBayar.find((o) => o.value === p.status_bayar)?.label ?? p.status_bayar,
   }));
 
   if (isLoading) return <Spinner />;
@@ -142,15 +153,12 @@ export function PesananPage() {
                   <th className="px-4 py-3 text-right font-bold">Harga</th>
                   <th className="px-4 py-3 font-bold">Status</th>
                   <th className="px-4 py-3 font-bold">Bayar</th>
-                  <th className="px-4 py-3 font-bold">Fisk</th>
                   <th className="px-4 py-3 text-right font-bold">Aksi</th>
                 </tr>
               </thead>
               <tbody>
-                {list.map((p) => {
-                  const canSelesai = p.dibayar && p.fisk;
-                  return (
-                    <tr key={p.id} className="border-b border-slate-100 last:border-0 hover:bg-bg-main">
+                {list.map((p) => (
+                  <tr key={p.id} className="border-b border-slate-100 last:border-0 hover:bg-bg-main">
                       <td className="px-4 py-3">
                         <p className="font-bold text-text-main">{p.kode}</p>
                         <p className="text-xs text-text-muted">{tanggalPendek(p.tanggal)}</p>
@@ -207,20 +215,38 @@ export function PesananPage() {
                         <StatusBadge status={p.status} />
                       </td>
                       <td className="px-4 py-3">
-                        <ToggleChip
-                          checked={p.dibayar}
-                          onClick={() =>
-                            update.mutate({ id: p.id, patch: { dibayar: !p.dibayar } })
+                        <select
+                          value={p.status_bayar}
+                          onChange={(e) =>
+                            update.mutate({
+                              id: p.id,
+                              patch: { status_bayar: e.target.value as StatusBayar },
+                            })
                           }
-                          label={p.dibayar ? "Lunas" : "Belum"}
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <ToggleChip
-                          checked={p.fisk}
-                          onClick={() => update.mutate({ id: p.id, patch: { fisk: !p.fisk } })}
-                          label={p.fisk ? "Ada" : "Belum"}
-                        />
+                          className={`rounded-lg border px-2 py-1 text-xs font-bold outline-none transition-colors ${
+                            p.status_bayar === "LUNAS"
+                              ? "border-emerald-200 bg-emerald-50 text-success"
+                              : p.status_bayar === "CICIL"
+                                ? "border-amber-200 bg-amber-50 text-warning"
+                                : "border-red-200 bg-red-50 text-danger"
+                          }`}
+                          title={
+                            p.status === "SELESAI" && p.status_bayar !== "LUNAS"
+                              ? "Selesai tapi belum lunas — belum masuk rekap"
+                              : "Status pembayaran customer"
+                          }
+                        >
+                          {OpsiBayar.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                        {p.status === "SELESAI" && p.status_bayar !== "LUNAS" && (
+                          <p className="mt-1 text-[11px] font-semibold text-warning">
+                            belum masuk rekap
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-2">
@@ -240,12 +266,7 @@ export function PesananPage() {
                           {p.status === "DIKERJAKAN" && (
                             <Button
                               variant="success"
-                              disabled={!canSelesai}
-                              title={
-                                canSelesai
-                                  ? "Tandai selesai"
-                                  : "Butuh pembayaran + fisk beres dulu"
-                              }
+                              title="Tandai selesai (masuk rekap bila sudah Lunas)"
                               onClick={() =>
                                 update.mutate({
                                   id: p.id,
@@ -269,8 +290,7 @@ export function PesananPage() {
                         </div>
                       </td>
                     </tr>
-                  );
-                })}
+                ))}
               </tbody>
             </table>
           </div>
@@ -286,25 +306,4 @@ export function PesananPage() {
   );
 }
 
-function ToggleChip({
-  checked,
-  onClick,
-  label,
-}: {
-  checked: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-full border px-2.5 py-0.5 text-xs font-bold transition-all ${
-        checked
-          ? "border-emerald-200 bg-emerald-50 text-success"
-          : "border-red-200 bg-red-50 text-danger"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
+

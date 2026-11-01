@@ -2,6 +2,7 @@
 
 export type Role = "OWNER" | "ADMIN";
 export type PesananStatus = "MENUNGU" | "DIKERJAKAN" | "SELESAI" | "BATAL";
+export type StatusBayar = "BELUM" | "CICIL" | "LUNAS";
 
 export interface Team {
   id: string;
@@ -58,8 +59,7 @@ export interface Pesanan {
   jumlah_keterangan: string;
   catatan: string | null;
   status: PesananStatus;
-  dibayar: boolean;
-  fisk: boolean;
+  status_bayar: StatusBayar;
   selesai_at: string | null;
   tanggal: string;
   dibuat_oleh: string;
@@ -69,7 +69,11 @@ export interface Pesanan {
   team?: Team | null;
 }
 
-/** Aturan rekap (dari mockup biru): hanya tugas SELESAI + pembayaran + fisk. */
-export function masukRekap(p: Pick<Pesanan, "status" | "dibayar" | "fisk">): boolean {
-  return p.status === "SELESAI" && p.dibayar && p.fisk;
+/**
+ * Aturan rekap (final 2026-11-02, permintaan client):
+ * tugas SELESAI + pembayaran LUNAS. CICIL/BELUM belum masuk rekap.
+ * (Sebelumnya: SELESAI + dibayar + fisk — fisk sudah dihapus dari alur.)
+ */
+export function masukRekap(p: Pick<Pesanan, "status" | "status_bayar">): boolean {
+  return p.status === "SELESAI" && p.status_bayar === "LUNAS";
 }

@@ -14,7 +14,7 @@ import {
 import { Card, EmptyState, Spinner, StatCard, StatusBadge, TeamTabs } from "../components/ui";
 
 const PESANAN_SELECT =
-  "id, kode, harga, fee_admin, fee_owner, fee_penjoki, status, dibayar, fisk, tanggal, team_id, customer:customers(nama), penjoki:penjoki(nama), team:teams(nama)";
+  "id, kode, harga, fee_admin, fee_owner, fee_penjoki, status, status_bayar, tanggal, team_id, customer:customers(nama), penjoki:penjoki(nama), team:teams(nama)";
 
 export function DashboardPage() {
   const { isOwner, teams, teamFilter, setTeamFilter, applyScope } = useScope();
@@ -90,7 +90,7 @@ export function DashboardPage() {
         <StatCard
           label="Total Tugas Selesai"
           value={String(selesai.length)}
-          sub="pembayaran + fisk beres"
+          sub="selesai + lunas"
           icon={<CheckCircleIcon className="h-6 w-6" />}
           accent="success"
         />

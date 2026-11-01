@@ -24,13 +24,22 @@ enum Role {
 }
 
 /// Status lifecycle pesanan:
-/// MENUNGU → DIKERJAKAN → SELESAI (hanya masuk rekap bila pembayaran + fisk beres)
+/// MENUNGU → DIKERJAKAN → SELESAI (masuk rekap bila status_bayar = LUNAS)
 enum PesananStatus {
   MENUNGU
   DIKERJAKAN
   SELESAI
   BATAL
   @@map("pesanan_status")
+}
+
+/// Status pembayaran customer (dropdown di Daftar Pesanan):
+/// BELUM = belum bayar · CICIL = bayar sebagian (belum masuk rekap) · LUNAS
+enum StatusBayar {
+  BELUM
+  CICIL
+  LUNAS
+  @@map("status_bayar")
 }
 
 /// Tim penjoki — Tim 1..5 (sumber: PDF rekap data penjoki)
@@ -139,10 +148,8 @@ model Pesanan {
   jumlahKeterangan String @map("jumlah_keterangan")
   catatan  String?
   status   PesananStatus @default(MENUNGU)
-  /// Pembayaran customer sudah masuk?
-  dibayar  Boolean @default(false)
-  /// Bukti "fisk" sudah diterima? (istilah client — lihat D6)
-  fisk     Boolean @default(false)
+  /// Status pembayaran: BELUM / CICIL / LUNAS (dropdown; menggantikan dibayar+fisk)
+  statusBayar StatusBayar @default(BELUM) @map("status_bayar")
   selesaiAt DateTime? @map("selesai_at")
   tanggal  DateTime @default(now())
   /// Admin yang membuat pesanan

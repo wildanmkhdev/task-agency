@@ -6,7 +6,14 @@ import { useAuth } from "../context/AuthContext";
 import { useScope } from "../hooks/useScope";
 import { kodeTransaksi, rupiah, yyyyMmDd } from "../lib/format";
 import { hitungFee } from "../lib/fee";
-import type { Customer, JenisTugas, Penjoki, PesananStatus, Team } from "../lib/types";
+import type {
+  Customer,
+  JenisTugas,
+  Penjoki,
+  PesananStatus,
+  StatusBayar,
+  Team,
+} from "../lib/types";
 import { Button, Card, Field, Spinner, inputCls } from "../components/ui";
 
 /**
@@ -30,6 +37,7 @@ export function TambahPesananPage() {
   const [tanggal, setTanggal] = useState<string>(yyyyMmDd(new Date()));
   /** Status awal — sinkron dengan kategori filter di Daftar Pesanan */
   const [fStatus, setFStatus] = useState<PesananStatus>("MENUNGU");
+  const [fBayar, setFBayar] = useState<StatusBayar>("BELUM");
   const [customerMode, setCustomerMode] = useState<"pilih" | "baru">("pilih");
   const [customerId, setCustomerId] = useState("");
   const [custNama, setCustNama] = useState("");
@@ -148,6 +156,7 @@ export function TambahPesananPage() {
         // Tanggal bisa lampau (backfill rekap) — dilihat semua peran dari kolom ini
         tanggal: tanggalIso,
         status: fStatus,
+        status_bayar: fBayar,
         // Kalau langsung dinyatakan selesai, catat waktu selesai-nya juga
         ...(fStatus === "SELESAI" ? { selesai_at: new Date().toISOString() } : {}),
         dibuat_oleh: profile!.id,
@@ -414,7 +423,7 @@ export function TambahPesananPage() {
             label="Status"
             hint={
               fStatus === "SELESAI"
-                ? "Langsung dicatat selesai. Masuk rekap bila pembayaran & fisk sudah ditandai di Daftar Pesanan."
+                ? "Langsung dicatat selesai. Masuk rekap bila status bayar juga Lunas."
                 : fStatus === "BATAL"
                   ? "Pesanan batal — tidak masuk rekap."
                   : "Default: Menunggu. Bisa diubah sewaktu-waktu di Daftar Pesanan."
@@ -429,6 +438,28 @@ export function TambahPesananPage() {
               <option value="DIKERJAKAN">Dikerjakan</option>
               <option value="SELESAI">Selesai</option>
               <option value="BATAL">Batal</option>
+            </select>
+          </Field>
+
+          {/* Status bayar — menggantikan toggle dibayar + fisk (client 2026-11-02) */}
+          <Field
+            label="Status Bayar"
+            hint={
+              fBayar === "LUNAS"
+                ? "Lunas — bila status Selesai, tugas langsung masuk rekap."
+                : fBayar === "CICIL"
+                  ? "Cicil = bayar sebagian — belum masuk rekap sampai Lunas."
+                  : "Belum bayar — belum masuk rekap. Bisa diubah di Daftar Pesanan."
+            }
+          >
+            <select
+              value={fBayar}
+              onChange={(e) => setFBayar(e.target.value as StatusBayar)}
+              className={inputCls}
+            >
+              <option value="BELUM">Belum Bayar</option>
+              <option value="CICIL">Cicil</option>
+              <option value="LUNAS">Lunas</option>
             </select>
           </Field>
 

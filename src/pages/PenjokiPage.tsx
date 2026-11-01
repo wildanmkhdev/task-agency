@@ -19,7 +19,7 @@ import {
  * Daftar Penjoki & Rate Keaktifan (tampilan-saja).
  * CRUD penuh (add/edit/hapus/rating/kategori) ada di menu khusus owner
  * "Manajemen Penjoki" (/penjoki/manajemen).
- * RATE_PROVISIONAL: formula sementara = tugas selesai (selesai+bayar+fisk)
+ * RATE_PROVISIONAL: formula sementara = tugas selesai + lunas
  * dibanding total pesanan bulan berjalan. Formula final menunggu keputusan D6.
  */
 export function PenjokiPage() {
@@ -41,10 +41,10 @@ export function PenjokiPage() {
   // Pesanan bulan berjalan (untuk hitung rate)
   const { data: pesananBulanIni } = useQuery({
     queryKey: ["penjoki-rate", teamFilter],
-    queryFn: async (): Promise<Pick<Pesanan, "penjoki_id" | "status" | "dibayar" | "fisk">[]> => {
+    queryFn: async (): Promise<Pick<Pesanan, "penjoki_id" | "status" | "status_bayar">[]> => {
       let q = supabase
         .from("pesanan")
-        .select("penjoki_id, status, dibayar, fisk")
+        .select("penjoki_id, status, status_bayar")
         .gte("tanggal", awalBulanIni());
       q = applyScope(q as never) as typeof q;
       const { data, error } = await q;
@@ -59,7 +59,7 @@ export function PenjokiPage() {
       if (p.status === "BATAL") continue;
       const cur = m.get(p.penjoki_id) ?? { selesai: 0, total: 0 };
       cur.total += 1;
-      if (p.status === "SELESAI" && p.dibayar && p.fisk) cur.selesai += 1;
+      if (p.status === "SELESAI" && p.status_bayar === "LUNAS") cur.selesai += 1;
       m.set(p.penjoki_id, cur);
     }
     return m;
@@ -81,7 +81,7 @@ export function PenjokiPage() {
     <div className="space-y-5">
       <p className="max-w-2xl text-sm text-text-secondary">
         Lihat daftar penjoki, tim, dan tingkat keaktifannya.{" "}
-        <strong>Rate</strong> dihitung dari tugas yang selesai (pembayaran + fisk) pada
+        <strong>Rate</strong> dihitung dari tugas yang selesai + lunas pada
         bulan berjalan — formula final menyusul konfirmasi client.
         Untuk <strong>tambah/edit/hapus penjoki, rating &amp; kategori</strong>,
         gunakan menu <strong>Manajemen Penjoki</strong>

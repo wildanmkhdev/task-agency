@@ -8,11 +8,11 @@ import { ExportButtons, type ExportColumn } from "../components/ExportButtons";
 import { Card, EmptyState, Spinner, StatusBadge, TeamTabs, inputCls } from "../components/ui";
 
 const PESANAN_SELECT =
-  "id, kode, harga, status, dibayar, fisk, tanggal, jumlah_keterangan, team_id, customer:customers(nama), penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama), team:teams(nama)";
+  "id, kode, harga, status, status_bayar, tanggal, jumlah_keterangan, team_id, customer:customers(nama), penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama), team:teams(nama)";
 
 /**
  * Data Rekap Harian Tim (mockup biru layar 2).
- * Aturan rekap: hanya tugas SELESAI + pembayaran + fisk yang masuk.
+ * Aturan rekap: hanya tugas SELESAI + status bayar LUNAS yang masuk.
  * Scope: admin = timnya sendiri; owner = semua tim / drill-down per tim.
  */
 export function RekapHarianPage() {
@@ -37,7 +37,7 @@ export function RekapHarianPage() {
     },
   });
 
-  // Aturan rekap resmi: hanya yang sudah selesai semua (pembayaran + fisk)
+  // Aturan rekap resmi: SELESAI + LUNAS (cicil/belum bayar belum dihitung)
   const rekap = (rows ?? []).filter(masukRekap);
   const total = rekap.reduce((s, p) => s + p.harga, 0);
 
@@ -66,8 +66,9 @@ export function RekapHarianPage() {
   return (
     <div className="space-y-5">
       <p className="max-w-2xl text-sm text-text-secondary">
-        Hanya tugas yang sudah <strong>selesai semua</strong> (pembayaran + fisk beres)
-        yang masuk ke rekap harian.
+        Hanya tugas yang sudah <strong>selesai</strong> dengan pembayaran{" "}
+        <strong>Lunas</strong> yang masuk ke rekap harian — cicil / belum bayar belum
+        dihitung.
       </p>
 
       {/* Kontrol: tanggal + filter tim + export */}
@@ -106,7 +107,7 @@ export function RekapHarianPage() {
         {rekap.length === 0 ? (
           <EmptyState
             title="Belum ada tugas masuk rekap"
-            hint="Pesanan baru masuk rekap setelah status SELESAI + dibayar + fisk beres."
+            hint="Pesanan masuk rekap setelah status SELESAI + bayar LUNAS."
           />
         ) : (
           <div className="overflow-x-auto">
@@ -156,10 +157,10 @@ export function RekapHarianPage() {
       {/* Ringkasan status (transparansi aturan rekap) */}
       <Card className="px-5 py-4">
         <p className="text-xs text-text-muted">
-          Catatan: {rows!.length} pesanan tercatat pada tanggal ini; {rekap.length} di
-          antaranya memenuhi syarat rekap (selesai + dibayar + fisk). Sisanya{" "}
-          <StatusBadge status="MENUNGU" /> / <StatusBadge status="DIKERJAKAN" /> belum
-          masuk rekap.
+          Catatan: {rows?.length ?? 0} pesanan tercatat pada tanggal ini; {rekap.length} di
+          antaranya memenuhi syarat rekap (selesai + lunas). Sisanya{" "}
+          <StatusBadge status="MENUNGU" /> / <StatusBadge status="DIKERJAKAN" /> atau
+          belum lunas — belum masuk rekap.
         </p>
       </Card>
     </div>
