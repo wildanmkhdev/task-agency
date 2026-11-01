@@ -1,5 +1,4 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
-import { Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
@@ -26,16 +25,18 @@ import {
 } from "../components/icons";
 
 /**
- * Manajemen Penjoki — KHUSUS OWNER (menu sidebar khusus).
+ * Manajemen Penjoki — untuk OWNER & ADMIN, data terintegrasi (satu tabel):
+ * - Owner : semua tim.
+ * - Admin : HANYA timnya sendiri (query di-scope + RLS database).
  * Fitur: tambah, edit, hapus (permanen), nonaktifkan, rating skill,
  * kategori/keahlian (chips + rename massal), keterangan, filter tim & kategori.
  *
- * Enforce: guard `isOwner` di bawah + RLS database (hapus = hanya owner).
  * Hapus permanen diblokir bila penjoki punya riwayat pesanan (FK RESTRICT) —
  * disarankan pakai Nonaktifkan.
  */
 export function PenjokiManajemenPage() {
-  const { isOwner, teams, teamFilter, setTeamFilter } = useScope();
+  const { profile, isOwner, teams, teamFilter, setTeamFilter, scopedTeamId, applyScope } =
+    useScope();
   const qc = useQueryClient();
   const formRef = useRef<HTMLDivElement>(null);
 
@@ -63,10 +64,10 @@ export function PenjokiManajemenPage() {
 
   // ---- Data ----
   const { data: penjoki, isLoading } = useQuery({
-    queryKey: ["penjoki-manajemen", teamFilter],
+    queryKey: ["penjoki-manajemen", scopedTeamId],
     queryFn: async (): Promise<PenjokiRow[]> => {
       let q = supabase.from("penjoki").select("*, team:teams(nama)").order("nama");
-      if (teamFilter) q = q.eq("team_id", teamFilter);
+      q = applyScope(q as never) as typeof q; // admin = timnya sendiri, owner = filter
       const { data, error } = await q;
       if (error) throw error;
       return data ?? [];
@@ -142,7 +143,8 @@ export function PenjokiManajemenPage() {
   const bukaTambah = () => {
     resetForm();
     setShowForm(true);
-    setFTim(teams[0]?.id ?? "");
+    // Admin terkunci ke timnya sendiri; owner bebas memilih (default tim pertama/filter)
+    setFTim(scopedTeamId ?? teams[0]?.id ?? "");
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -163,7 +165,9 @@ export function PenjokiManajemenPage() {
     mutationFn: async () => {
       const nama = fNama.trim();
       if (!nama) throw new Error("Nama wajib diisi.");
-      if (!fTim) throw new Error("Tim wajib dipilih.");
+      // Admin selalu dipaksa ke timnya sendiri (bukan pilihan form)
+      const timFinal = isOwner ? fTim : (profile?.team_id ?? "");
+      if (!timFinal) throw new Error("Tim wajib dipilih.");
       let rating: number | null = null;
       if (fRating.trim()) {
         rating = Number(fRating);
@@ -173,7 +177,7 @@ export function PenjokiManajemenPage() {
       const payload = {
         nama,
         no_hp: fWa.trim() || null,
-        team_id: fTim,
+        team_id: timFinal,
         rating_skill: rating,
         keahlian: fKeahlian,
         keterangan: fKeterangan.trim() || null,
@@ -266,8 +270,6 @@ export function PenjokiManajemenPage() {
   };
   const removeTag = (k: string) => setFKeahlian((cur) => cur.filter((x) => x !== k));
 
-  // Guard: halaman ini khusus owner (RLS juga membatasi di database)
-  if (!isOwner) return <Navigate to="/penjoki" replace />;
   if (isLoading) return <Spinner label="Memuat data penjoki…" />;
 
   const onSubmit = (e: FormEvent) => {
@@ -288,8 +290,8 @@ export function PenjokiManajemenPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-2xl text-sm text-text-secondary">
           Kelola data penjoki: <strong>tambah, edit, hapus, rating, kategori</strong>,
-          dan keterangan. Menu ini <strong>khusus Owner</strong> — admin tim hanya bisa
-          melihat di halaman Penjoki &amp; Rate.
+          dan keterangan. Owner mengelola <strong>semua tim</strong>; admin hanya{" "}
+          <strong>timnya sendiri</strong> (terkunci otomatis).
         </p>
         <Button variant="primary" onClick={bukaTambah}>
           <PlusIcon className="h-4 w-4" />
@@ -360,18 +362,30 @@ export function PenjokiManajemenPage() {
                     placeholder="08xx"
                   />
                 </Field>
-                <Field label="Tim">
+                <Field
+                  label="Tim"
+                  hint={isOwner ? undefined : "Admin hanya bisa mengelola timnya sendiri."}
+                >
                   <select
                     value={fTim}
                     onChange={(e) => setFTim(e.target.value)}
+                    disabled={!isOwner}
                     className={inputCls}
                   >
-                    <option value="">— Pilih tim —</option>
-                    {teams.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.nama}
+                    {!isOwner && profile?.team_id && (
+                      <option value={profile.team_id}>
+                        {teams.find((t) => t.id === profile.team_id)?.nama ?? "Tim saya"}
                       </option>
-                    ))}
+                    )}
+                    {isOwner && (
+                      <option value="">— Pilih tim —</option>
+                    )}
+                    {isOwner &&
+                      teams.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.nama}
+                        </option>
+                      ))}
                   </select>
                 </Field>
                 <Field label="Rating Skill (0–100)" hint="Kosongkan bila belum tahu.">
@@ -570,9 +584,15 @@ export function PenjokiManajemenPage() {
         )}
       </Card>
 
-      {/* Filter tim + cari */}
+      {/* Filter tim (owner) + cari */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <TeamTabs teams={teams} value={teamFilter} onChange={setTeamFilter} />
+        {isOwner ? (
+          <TeamTabs teams={teams} value={teamFilter} onChange={setTeamFilter} />
+        ) : (
+          <span className="inline-flex items-center gap-2 rounded-full border border-brand-border bg-brand-soft px-3 py-1 text-xs font-bold text-brand">
+            📌 Mengelola: {teams.find((t) => t.id === profile?.team_id)?.nama ?? "Tim saya"}
+          </span>
+        )}
         <input
           placeholder="Cari nama penjoki…"
           value={cari}

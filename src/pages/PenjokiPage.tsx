@@ -83,13 +83,9 @@ export function PenjokiPage() {
         Lihat daftar penjoki, tim, dan tingkat keaktifannya.{" "}
         <strong>Rate</strong> dihitung dari tugas yang selesai (pembayaran + fisk) pada
         bulan berjalan — formula final menyusul konfirmasi client.
-        {isOwner && (
-          <>
-            {" "}
-            Untuk <strong>tambah/edit/hapus penjoki, rating &amp; kategori</strong>,
-            gunakan menu <strong>Manajemen Penjoki</strong>.
-          </>
-        )}
+        Untuk <strong>tambah/edit/hapus penjoki, rating &amp; kategori</strong>,
+        gunakan menu <strong>Manajemen Penjoki</strong>
+        {!isOwner && " (terkunci ke tim Anda)"}.
       </p>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -99,11 +95,9 @@ export function PenjokiPage() {
           onChange={(e) => setCari(e.target.value)}
           className={`${inputCls} w-full max-w-xs`}
         />
-        {isOwner && (
-          <Button variant="primary" onClick={() => navigate("/penjoki/manajemen")}>
-            ⚙️ Kelola Penjoki
-          </Button>
-        )}
+        <Button variant="primary" onClick={() => navigate("/penjoki/manajemen")}>
+          ⚙️ Kelola Penjoki
+        </Button>
       </div>
 
       {isOwner && <TeamTabs teams={teams} value={teamFilter} onChange={setTeamFilter} />}

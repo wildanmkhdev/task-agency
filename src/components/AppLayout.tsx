@@ -20,20 +20,13 @@ const baseNav = [
   { to: "/pesanan", label: "Daftar Pesanan", icon: ChartBarIcon },
   { to: "/pesanan/baru", label: "Tambah Pesanan", icon: PlusCircleIcon },
   { to: "/penjoki", label: "Penjoki & Rate", icon: UsersIcon, end: true },
+  // Manajemen Penjoki: owner = semua tim, admin = timnya sendiri (enforce via RLS)
+  { to: "/penjoki/manajemen", label: "Manajemen Penjoki", icon: Cog6ToothIcon },
 ];
 
-/** Menu "Manajemen Penjoki" hanya untuk OWNER (CRUD penuh — add/hapus/rating/kategori). */
-export function navItems(isOwner: boolean) {
-  return isOwner
-    ? [
-        ...baseNav,
-        {
-          to: "/penjoki/manajemen",
-          label: "Manajemen Penjoki",
-          icon: Cog6ToothIcon,
-        },
-      ]
-    : baseNav;
+/** Item menu sidebar (sama untuk owner & admin — scoping data via RLS). */
+export function navItems() {
+  return baseNav;
 }
 
 const STORAGE_KEY = "jta-sidebar-collapsed";
@@ -74,7 +67,7 @@ function SidebarContent({
 
       {/* Nav */}
       <nav className="flex-1 space-y-1 px-3 py-2">
-        {navItems(isOwner).map(({ to, label, icon: Icon, end }) => (
+        {navItems().map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
@@ -163,7 +156,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }, [collapsed]);
 
   // Pilih yang paling spesifik (mis. /penjoki/manajemen menang atas /penjoki)
-  const current = navItems(isOwner)
+  const current = navItems()
     .filter((n) =>
       n.end ? location.pathname === n.to : location.pathname.startsWith(n.to)
     )
