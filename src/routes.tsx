@@ -6,10 +6,15 @@ import { Spinner } from "./components/ui";
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { RekapHarianPage } from "./pages/RekapHarianPage";
+import { DetailRekapPage } from "./pages/DetailRekapPage";
 import { PesananPage } from "./pages/PesananPage";
 import { TambahPesananPage } from "./pages/TambahPesananPage";
 import { PenjokiPage } from "./pages/PenjokiPage";
 import { PenjokiManajemenPage } from "./pages/PenjokiManajemenPage";
+import { PengaturanPage } from "./pages/PengaturanPage";
+import { JadwalSetorPage } from "./pages/JadwalSetorPage";
+import { DomainOwnerPage } from "./pages/DomainOwnerPage";
+import { NotifikasiPage } from "./pages/NotifikasiPage";
 
 /** Guard: wajib login. Scoping owner/admin ditegakkan RLS di database (D1). */
 function RequireAuth() {
@@ -36,10 +41,15 @@ export const router = createBrowserRouter([
     children: [
       { path: "/", element: <DashboardPage /> },
       { path: "/rekap", element: <RekapHarianPage /> },
+      { path: "/rekap/:adminId", element: <DetailRekapPage /> },
       { path: "/pesanan", element: <PesananPage /> },
       { path: "/pesanan/baru", element: <TambahPesananPage /> },
       { path: "/penjoki", element: <PenjokiPage /> },
       { path: "/penjoki/manajemen", element: <PenjokiManajemenPage /> },
+      { path: "/jadwal", element: <JadwalSetorPage /> },
+      { path: "/domain-owner", element: <DomainOwnerPage /> },
+      { path: "/notifikasi", element: <NotifikasiPage /> },
+      { path: "/pengaturan", element: <PengaturanPage /> },
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },

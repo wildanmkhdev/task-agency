@@ -1,168 +1,255 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
-import { rupiah, tanggalPendek, yyyyMmDd } from "../lib/format";
-import { masukRekap, type Pesanan } from "../lib/types";
-import { ExportButtons, type ExportColumn } from "../components/ExportButtons";
-import { Card, EmptyState, Spinner, StatusBadge, TeamTabs, inputCls } from "../components/ui";
+import { useAuth } from "../context/AuthContext";
+import { rupiah, tanggalPanjang, yyyyMmDd } from "../lib/format";
+import { masukRekap, type Pesanan, type Profile } from "../lib/types";
+import { jenisAdmin, namaTampil, urutkanAdmin } from "../lib/admin";
+import { Card, EmptyState, Spinner } from "../components/ui";
 
 const PESANAN_SELECT =
-  "id, kode, harga, status, status_bayar, tanggal, jumlah_keterangan, team_id, customer:customers(nama), penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama), team:teams(nama)";
+  "id, harga, status, status_bayar, tanggal, dibuat_oleh, penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama)";
+
+function geserTanggal(tanggal: string, hari: number): string {
+  const d = new Date(`${tanggal}T00:00:00`);
+  d.setDate(d.getDate() + hari);
+  return yyyyMmDd(d);
+}
+
+function persenPerubahan(now: number, prev: number): number | null {
+  if (!prev) return null;
+  return ((now - prev) / prev) * 100;
+}
+
+function Trend({ value }: { value: number | null }) {
+  if (value === null)
+    return <span className="text-[11px] font-semibold text-text-muted">— dari kemarin</span>;
+  const naik = value >= 0;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[11px] font-bold ${
+        naik ? "text-emerald-300" : "text-danger"
+      }`}
+    >
+      {naik ? "↑" : "↓"} {Math.abs(value).toFixed(0)}% dari kemarin
+    </span>
+  );
+}
 
 /**
- * Data Rekap Harian Tim (mockup biru layar 2).
- * Aturan rekap: hanya tugas SELESAI + status bayar LUNAS yang masuk.
- * Scope: admin = timnya sendiri; owner = semua tim / drill-down per tim.
+ * Data Rekap Harian Tim — revisi client:
+ * - Lingkaran/card tetap, "Total Transaksi" → "Total Pendapatan"
+ * - % naik/turun dibanding pendapatan kemarin (reset 00.00 / 24 jam)
+ * - Tombol "Lihat Detail Rekap" dihapus → klik nama admin langsung ke detail
+ * - Nama tanpa suffix "cs"; admin sosmed paling bawah.
  */
 export function RekapHarianPage() {
-  const { isOwner, teams, teamFilter, setTeamFilter, applyScope } = useScope();
+  const { isOwner } = useScope();
+  const { profile } = useAuth();
+  const navigate = useNavigate();
   const [tanggal, setTanggal] = useState(yyyyMmDd(new Date()));
+  const kemarin = geserTanggal(tanggal, -1);
 
-  const { data: rows, isLoading } = useQuery({
-    queryKey: ["rekap", tanggal, teamFilter],
+  const { data: rowsHariIni, isLoading } = useQuery({
+    queryKey: ["rekap", tanggal],
     queryFn: async (): Promise<Pesanan[]> => {
-      const start = new Date(`${tanggal}T00:00:00`);
-      const end = new Date(`${tanggal}T23:59:59.999`);
-      let q = supabase
+      const { data, error } = await supabase
         .from("pesanan")
         .select(PESANAN_SELECT)
-        .gte("tanggal", start.toISOString())
-        .lte("tanggal", end.toISOString())
+        .gte("tanggal", new Date(`${tanggal}T00:00:00`).toISOString())
+        .lte("tanggal", new Date(`${tanggal}T23:59:59.999`).toISOString())
         .order("tanggal", { ascending: true });
-      q = applyScope(q as never) as typeof q;
-      const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as unknown as Pesanan[];
     },
   });
 
-  // Aturan rekap resmi: SELESAI + LUNAS (cicil/belum bayar belum dihitung)
-  const rekap = (rows ?? []).filter(masukRekap);
-  const total = rekap.reduce((s, p) => s + p.harga, 0);
+  const { data: rowsKemarin } = useQuery({
+    queryKey: ["rekap", kemarin],
+    queryFn: async (): Promise<Pesanan[]> => {
+      const { data, error } = await supabase
+        .from("pesanan")
+        .select(PESANAN_SELECT)
+        .gte("tanggal", new Date(`${kemarin}T00:00:00`).toISOString())
+        .lte("tanggal", new Date(`${kemarin}T23:59:59.999`).toISOString());
+      if (error) throw error;
+      return (data ?? []) as unknown as Pesanan[];
+    },
+  });
 
-  const exportColumns: ExportColumn[] = [
-    { key: "no", label: "No", render: (r) => String(r.no) },
-    { key: "tanggal", label: "Tanggal", render: (r) => tanggalPendek(String(r.tanggal)) },
-    { key: "penjoki", label: "Penjoki", render: (r) => String(r.penjoki) },
-    { key: "customer", label: "Customer", render: (r) => String(r.customer) },
-    { key: "jenis", label: "Jenis Tugas", render: (r) => String(r.jenis) },
-    { key: "harga", label: "Payment Customer", currency: true },
-    { key: "status", label: "Status", render: (r) => String(r.status) },
-  ];
+  const { data: admins } = useQuery({
+    queryKey: ["admins"],
+    queryFn: async (): Promise<Profile[]> => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, role, team_id, nama_lengkap, no_hp, aktif, team:teams(nama)")
+        .eq("role", "ADMIN");
+      if (error) throw error;
+      return (data ?? []) as unknown as Profile[];
+    },
+  });
 
-  const exportRows = rekap.map((p, i) => ({
-    no: i + 1,
-    tanggal: p.tanggal,
-    penjoki: p.penjoki?.nama ?? "-",
-    customer: p.customer?.nama ?? "-",
-    jenis: p.jenis_tugas?.nama ?? "-",
-    harga: p.harga,
-    status: "Selesai",
-  }));
+  const rekapHariIni = (rowsHariIni ?? []).filter(masukRekap);
+  const rekapKemarin = (rowsKemarin ?? []).filter(masukRekap);
 
-  if (isLoading) return <Spinner />;
+  const totalPendapatan = rekapHariIni.reduce((s, p) => s + p.harga, 0);
+  const totalPendapatanKemarin = rekapKemarin.reduce((s, p) => s + p.harga, 0);
+
+  const daftarAdmin = useMemo(() => {
+    const base = urutkanAdmin(admins ?? []);
+    // Admin biasa hanya melihat dirinya sendiri (RLS juga membatasi).
+    const terlihat = isOwner
+      ? base
+      : base.filter((a) => a.id === profile?.id);
+    return terlihat.map((a) => {
+      const milik = rekapHariIni.filter((p) => p.dibuat_oleh === a.id);
+      return {
+        admin: a,
+        jumlah: milik.length,
+        pendapatan: milik.reduce((s, p) => s + p.harga, 0),
+      };
+    });
+  }, [admins, isOwner, profile?.id, rekapHariIni]);
+
+  if (isLoading) return <Spinner label="Memuat rekap harian…" />;
 
   return (
-    <div className="space-y-5">
-      <p className="max-w-2xl text-sm text-text-secondary">
-        Hanya tugas yang sudah <strong>selesai</strong> dengan pembayaran{" "}
-        <strong>Lunas</strong> yang masuk ke rekap harian — cicil / belum bayar belum
-        dihitung.
-      </p>
-
-      {/* Kontrol: tanggal + filter tim + export */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <input
-          type="date"
-          value={tanggal}
-          onChange={(e) => setTanggal(e.target.value)}
-          className={`${inputCls} w-auto`}
-        />
-        <ExportButtons
-          title={`Rekap Harian — ${tanggalPendek(new Date(`${tanggal}T00:00:00`))}`}
-          filename={`rekap-harian-${tanggal}`}
-          columns={exportColumns}
-          rows={exportRows}
-        />
+    <div className="mx-auto max-w-3xl space-y-4">
+      {/* Navigasi tanggal */}
+      <div className="flex items-center justify-center gap-3">
+        <button
+          onClick={() => setTanggal(geserTanggal(tanggal, -1))}
+          className="rounded-full border border-line bg-surface-2 p-2 text-text-secondary hover:border-brand-border hover:text-gold"
+          aria-label="Hari sebelumnya"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.2}>
+            <path d="m15 6-6 6 6 6" />
+          </svg>
+        </button>
+        <label className="relative flex items-center gap-2 rounded-full border border-brand-border bg-surface-2 px-4 py-2 text-xs font-bold text-gold-soft">
+          <svg viewBox="0 0 24 24" className="h-4 w-4 text-gold" fill="none" stroke="currentColor" strokeWidth={1.8}>
+            <rect x="3" y="5" width="18" height="16" rx="2.5" />
+            <path d="M8 3v4M16 3v4M3 10h18" />
+          </svg>
+          <span>{tanggalPanjang(`${tanggal}T00:00:00`)}</span>
+          <input
+            type="date"
+            value={tanggal}
+            onChange={(e) => setTanggal(e.target.value)}
+            className="absolute inset-0 cursor-pointer opacity-0"
+            aria-label="Pilih tanggal"
+          />
+        </label>
+        <button
+          onClick={() => setTanggal(geserTanggal(tanggal, 1))}
+          className="rounded-full border border-line bg-surface-2 p-2 text-text-secondary hover:border-brand-border hover:text-gold"
+          aria-label="Hari berikutnya"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.2}>
+            <path d="m9 6 6 6-6 6" />
+          </svg>
+        </button>
       </div>
 
-      {isOwner && (
-        <TeamTabs teams={teams} value={teamFilter} onChange={setTeamFilter} />
-      )}
-
-      <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-5 py-4">
-          <div>
-            <h3 className="font-display text-base font-extrabold">Data Rekap Harian Tim</h3>
-            <p className="text-xs text-text-muted">
-              {tanggalPendek(new Date(`${tanggal}T00:00:00`))} · {rekap.length} data
+      {/* 2 kotak utama */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="card-premium rounded-card p-4 sm:p-5">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-brand-border bg-brand/15 text-gold">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                <circle cx="12" cy="12" r="8" />
+                <path d="M12 7v10M9.5 14.5c.6.8 1.5 1.2 2.5 1.2 1.4 0 2.4-.7 2.4-1.8 0-1-.7-1.5-2.4-1.9-1.7-.4-2.4-.9-2.4-1.9 0-1.1 1-1.8 2.4-1.8 1 0 1.9.4 2.5 1.2" />
+              </svg>
+            </span>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-[11px]">
+              Total Pendapatan
             </p>
           </div>
-          <p className="text-sm font-extrabold text-text-main">
-            Total: <span className="tabular-nums">{rupiah(total)}</span>
+          <p className="mt-3 font-display text-xl font-extrabold text-gold-soft tabular sm:text-2xl">
+            {rupiah(totalPendapatan)}
           </p>
+          <div className="mt-1">
+            <Trend value={persenPerubahan(totalPendapatan, totalPendapatanKemarin)} />
+          </div>
         </div>
 
-        {rekap.length === 0 ? (
-          <EmptyState
-            title="Belum ada tugas masuk rekap"
-            hint="Pesanan masuk rekap setelah status SELESAI + bayar LUNAS."
-          />
+        <div className="card-premium rounded-card p-4 sm:p-5">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-400/25 bg-emerald-400/10 text-emerald-300">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                <path d="M9 11.5 11.5 14 16 9.5" />
+                <circle cx="12" cy="12" r="8" />
+              </svg>
+            </span>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-[11px]">
+              Total Tugas Selesai
+            </p>
+          </div>
+          <p className="mt-3 font-display text-xl font-extrabold text-text-main tabular sm:text-2xl">
+            {rekapHariIni.length}
+          </p>
+          <div className="mt-1">
+            <Trend value={persenPerubahan(rekapHariIni.length, rekapKemarin.length)} />
+          </div>
+        </div>
+      </div>
+
+      {/* Rekap per admin */}
+      <div>
+        <div className="mb-2 flex items-center justify-between px-1">
+          <h3 className="font-display text-sm font-extrabold text-text-main">
+            Rekap per Admin CS
+          </h3>
+          <span className="text-[11px] font-semibold text-text-muted">
+            Klik nama untuk detail
+          </span>
+        </div>
+
+        {daftarAdmin.length === 0 ? (
+          <Card>
+            <EmptyState
+              title="Belum ada admin"
+              hint="Data admin akan tampil di sini setelah akun dibuat."
+            />
+          </Card>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-bg-main text-left text-xs uppercase tracking-wide text-text-muted">
-                  <th className="px-5 py-3 font-bold">No</th>
-                  <th className="px-5 py-3 font-bold">Tanggal</th>
-                  <th className="px-5 py-3 font-bold">Penjoki</th>
-                  <th className="px-5 py-3 font-bold">Customer</th>
-                  <th className="px-5 py-3 font-bold">Tugas</th>
-                  {isOwner && <th className="px-5 py-3 font-bold">Tim</th>}
-                  <th className="px-5 py-3 text-right font-bold">Payment Customer</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rekap.map((p, i) => (
-                  <tr key={p.id} className="border-b border-slate-100 last:border-0 hover:bg-bg-main">
-                    <td className="px-5 py-3 tabular-nums text-text-muted">{i + 1}</td>
-                    <td className="px-5 py-3">{tanggalPendek(p.tanggal)}</td>
-                    <td className="px-5 py-3 font-bold text-text-main">
-                      {p.penjoki?.nama ?? "-"}
-                    </td>
-                    <td className="px-5 py-3">{p.customer?.nama ?? "-"}</td>
-                    <td className="px-5 py-3">
-                      <p className="font-medium text-text-main">{p.jenis_tugas?.nama ?? "-"}</p>
-                      <p className="text-xs text-text-muted">{p.jumlah_keterangan}</p>
-                    </td>
-                    {isOwner && (
-                      <td className="px-5 py-3">
-                        <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-bold text-text-secondary">
-                          {p.team?.nama ?? "-"}
-                        </span>
-                      </td>
-                    )}
-                    <td className="px-5 py-3 text-right font-extrabold tabular-nums">
-                      {rupiah(p.harga)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-2">
+            {daftarAdmin.map(({ admin, jumlah, pendapatan }) => {
+              const sosmed = jenisAdmin(admin) === "sosmed";
+              const nama = sosmed ? `${namaTampil(admin)} sosmed` : namaTampil(admin);
+              return (
+                <button
+                  key={admin.id}
+                  onClick={() => navigate(`/rekap/${admin.id}?tanggal=${tanggal}`)}
+                  className="group flex w-full items-center gap-3 rounded-2xl border border-line bg-surface/80 px-4 py-3 text-left transition-all hover:border-brand-border hover:bg-surface-2"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-brand-border/60 bg-brand/10 text-xs font-extrabold text-gold">
+                    {nama.slice(0, 2).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-text-main">{nama}</p>
+                    <p className="text-[11px] text-text-muted">{jumlah} Transaksi</p>
+                  </div>
+                  <span className="shrink-0 text-sm font-extrabold text-gold-soft tabular">
+                    {rupiah(pendapatan)}
+                  </span>
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4 shrink-0 text-text-muted transition-colors group-hover:text-gold"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.2}
+                  >
+                    <path d="m9 6 6 6-6 6" />
+                  </svg>
+                </button>
+              );
+            })}
           </div>
         )}
-      </Card>
-
-      {/* Ringkasan status (transparansi aturan rekap) */}
-      <Card className="px-5 py-4">
-        <p className="text-xs text-text-muted">
-          Catatan: {rows?.length ?? 0} pesanan tercatat pada tanggal ini; {rekap.length} di
-          antaranya memenuhi syarat rekap (selesai + lunas). Sisanya{" "}
-          <StatusBadge status="MENUNGU" /> / <StatusBadge status="DIKERJAKAN" /> atau
-          belum lunas — belum masuk rekap.
-        </p>
-      </Card>
+      </div>
     </div>
   );
 }

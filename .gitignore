@@ -37,6 +37,10 @@ supabase/.branches/
 *.jpg
 *.png
 *.pdf
+revisi/
+
+# Aset merek aplikasi (boleh di-commit)
+!src/assets/*.png
 
 # File akun seed (password)
 akun_seed*

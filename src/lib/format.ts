@@ -34,6 +34,18 @@ export function tanggalWaktu(iso: string | Date): string {
   return dateTimeFmt.format(new Date(iso));
 }
 
+const dateLongFmt = new Intl.DateTimeFormat("id-ID", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+
+/** Senin, 30 Juni 2025 */
+export function tanggalPanjang(iso: string | Date): string {
+  return dateLongFmt.format(new Date(iso));
+}
+
 /** yyyy-mm-dd (untuk input date) */
 export function yyyyMmDd(d: Date): string {
   const y = d.getFullYear();

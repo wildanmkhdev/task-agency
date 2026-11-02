@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { PesananStatus } from "../lib/types";
 
-/** Kartu KPI — putih, radius 20, shadow halus (design system §4b) */
+/** Kartu KPI — hijau gelap bertingkat + aksen emas (mockup JOKITUGASAJA_ID) */
 export function StatCard({
   label,
   value,
@@ -13,22 +13,23 @@ export function StatCard({
   value: string;
   sub?: string;
   icon: ReactNode;
-  accent?: "brand" | "navy" | "success" | "warning";
+  accent?: "brand" | "navy" | "success" | "warning" | "violet";
 }) {
   const accents: Record<string, string> = {
-    brand: "bg-brand-soft text-brand border-brand-border",
-    navy: "bg-navy text-white border-navy",
-    success: "bg-emerald-50 text-success border-emerald-200",
-    warning: "bg-warning-soft text-warning border-warning-border",
+    brand: "bg-brand/15 text-gold border-brand-border",
+    navy: "bg-emerald-400/10 text-emerald-300 border-emerald-400/25",
+    success: "bg-emerald-400/10 text-emerald-300 border-emerald-400/25",
+    warning: "bg-amber-400/10 text-amber-300 border-amber-400/25",
+    violet: "bg-fuchsia-400/10 text-fuchsia-300 border-fuchsia-400/25",
   };
   return (
-    <div className="rounded-card border border-slate-200 bg-white p-5 shadow-[0_4px_16px_rgba(15,23,42,0.05)]">
+    <div className="card-premium rounded-card p-5">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
             {label}
           </p>
-          <p className="mt-2 font-display text-3xl font-extrabold text-text-main">
+          <p className="mt-2 truncate font-display text-2xl font-extrabold text-text-main">
             {value}
           </p>
           {sub && <p className="mt-1 text-xs text-text-secondary">{sub}</p>}
@@ -45,9 +46,9 @@ export function StatCard({
 
 const statusStyle: Record<PesananStatus, string> = {
   MENUNGU: "bg-warning-soft text-warning border-warning-border",
-  DIKERJAKAN: "bg-brand-soft text-brand border-brand-border",
-  SELESAI: "bg-emerald-50 text-success border-emerald-200",
-  BATAL: "bg-red-50 text-danger border-red-200",
+  DIKERJAKAN: "bg-brand-soft text-gold border-brand-border",
+  SELESAI: "bg-emerald-400/10 text-emerald-300 border-emerald-400/25",
+  BATAL: "bg-red-400/10 text-danger border-red-400/25",
 };
 
 const statusLabel: Record<PesananStatus, string> = {
@@ -71,16 +72,16 @@ export function StatusBadge({ status }: { status: PesananStatus }) {
 export function RateBadge({ rate }: { rate: number | null }) {
   if (rate === null) {
     return (
-      <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-bold text-text-muted">
+      <span className="inline-flex items-center rounded-full border border-line bg-surface-2 px-2.5 py-0.5 text-xs font-bold text-text-muted">
         —
       </span>
     );
   }
-  let cls = "bg-emerald-50 text-success border-emerald-200";
-  if (rate < 45) cls = "bg-red-50 text-danger border-red-200";
-  else if (rate < 60) cls = "bg-orange-50 text-orange border-orange-200";
+  let cls = "bg-emerald-400/10 text-emerald-300 border-emerald-400/25";
+  if (rate < 45) cls = "bg-red-400/10 text-danger border-red-400/25";
+  else if (rate < 60) cls = "bg-orange-400/10 text-orange border-orange-400/25";
   else if (rate < 75) cls = "bg-warning-soft text-warning border-warning-border";
-  else if (rate < 90) cls = "bg-brand-soft text-brand border-brand-border";
+  else if (rate < 90) cls = "bg-brand-soft text-gold border-brand-border";
   return (
     <span
       className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${cls}`}
@@ -98,11 +99,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div
-      className={`rounded-card border border-slate-200 bg-white shadow-[0_4px_16px_rgba(15,23,42,0.05)] ${className}`}
-    >
-      {children}
-    </div>
+    <div className={`card-premium rounded-card ${className}`}>{children}</div>
   );
 }
 
@@ -124,10 +121,12 @@ export function Button({
   className?: string;
 }) {
   const variants: Record<string, string> = {
-    primary: "bg-brand text-white hover:bg-brand-hover border-brand",
-    success: "bg-wa text-white hover:bg-wa-dark border-wa-dark",
-    ghost: "bg-white text-text-main border-slate-200 hover:bg-bg-main hover:border-slate-300",
-    danger: "bg-white text-danger border-red-200 hover:bg-red-50",
+    primary:
+      "bg-brand text-[#10231a] hover:bg-brand-hover border-brand shadow-[0_6px_20px_-8px_rgba(217,180,95,0.7)]",
+    success: "bg-wa text-[#062316] hover:bg-wa-dark border-wa-dark",
+    ghost:
+      "bg-surface-2 text-text-main border-line hover:bg-surface-3 hover:border-brand-border",
+    danger: "bg-surface-2 text-danger border-red-400/30 hover:bg-red-400/10",
   };
   return (
     <button
@@ -142,7 +141,7 @@ export function Button({
   );
 }
 
-/** Tab pill — aktif = navy gelap (pola filter landing page) */
+/** Tab pill — aktif = emas */
 export function TeamTabs({
   teams,
   value,
@@ -168,8 +167,8 @@ export function TeamTabs({
             onClick={() => onChange(id)}
             className={`shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-bold transition-all ${
               active
-                ? "border-text-main bg-text-main text-white"
-                : "border-slate-200 bg-white text-text-secondary hover:border-slate-300 hover:text-text-main"
+                ? "border-brand bg-brand text-[#10231a]"
+                : "border-line bg-surface-2 text-text-secondary hover:border-brand-border hover:text-text-main"
             }`}
           >
             {t.nama}
@@ -183,7 +182,7 @@ export function TeamTabs({
 export function Spinner({ label = "Memuat data…" }: { label?: string }) {
   return (
     <div className="flex items-center justify-center gap-3 py-16 text-text-muted">
-      <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-brand" />
+      <span className="h-5 w-5 animate-spin rounded-full border-2 border-line border-t-brand" />
       <span className="text-sm font-medium">{label}</span>
     </div>
   );
@@ -220,4 +219,4 @@ export function Field({
 }
 
 export const inputCls =
-  "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-text-main outline-none transition-all placeholder:text-text-muted focus:border-brand focus:ring-2 focus:ring-brand/20";
+  "w-full rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-text-main outline-none transition-all placeholder:text-text-muted focus:border-brand focus:ring-2 focus:ring-brand/20";

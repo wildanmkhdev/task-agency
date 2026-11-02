@@ -44,8 +44,6 @@ export function TambahPesananPage() {
   const [custWa, setCustWa] = useState("");
   const [jenisId, setJenisId] = useState("");
   const [harga, setHarga] = useState("");
-  /** Fee admin — diisi manual oleh OWNER (D5), bukan formula */
-  const [feeAdminManual, setFeeAdminManual] = useState("");
   const [penjokiId, setPenjokiId] = useState("");
   const [jumlah, setJumlah] = useState("");
   const [catatan, setCatatan] = useState("");
@@ -129,17 +127,8 @@ export function TambahPesananPage() {
         if (!custId) throw new Error("Customer wajib dipilih.");
       }
 
-      // Fee admin manual (khusus owner, D5) — validasi angka
-      let feeAdminManualNum = 0;
-      if (isOwner && feeAdminManual.trim()) {
-        feeAdminManualNum = Number(feeAdminManual);
-        if (!Number.isFinite(feeAdminManualNum) || feeAdminManualNum < 0)
-          throw new Error("Fee admin tidak valid (harus angka ≥ 0).");
-        if (feeAdminManualNum > hargaNum)
-          throw new Error("Fee admin melebihi harga customer.");
-      }
-
-      const { feeOwner, feePenjoki } = hitungFee(hargaNum);
+      // Fee dibagi otomatis: penjoki 50% · admin CS 23% · sosmed 7% · owner 20%
+      const fee = hitungFee(hargaNum);
       const { error } = await supabase.from("pesanan").insert({
         kode: kodeTransaksi(),
         team_id: scopedTeamId,
@@ -147,10 +136,9 @@ export function TambahPesananPage() {
         jenis_tugas_id: jenisId,
         penjoki_id: penjokiId,
         harga: hargaNum,
-        // D5 final: penjoki 50% + owner 50% (otomatis); fee admin = manual owner
-        fee_admin: feeAdminManualNum,
-        fee_owner: feeOwner,
-        fee_penjoki: feePenjoki,
+        fee_admin: fee.feeAdmin,
+        fee_owner: fee.feeOwner,
+        fee_penjoki: fee.feePenjoki,
         jumlah_keterangan: jumlah.trim(),
         catatan: catatan.trim() || null,
         // Tanggal bisa lampau (backfill rekap) — dilihat semua peran dari kolom ini
@@ -230,12 +218,12 @@ export function TambahPesananPage() {
               type="date"
               value={tanggal}
               onChange={(e) => setTanggal(e.target.value)}
-              className={inputCls}
+              className={`${inputCls} [color-scheme:dark]`}
             />
           </Field>
 
           {/* Customer */}
-          <div className="rounded-xl border border-slate-200 bg-bg-main p-4">
+          <div className="rounded-xl border border-line bg-surface-2 p-4">
             <p className="mb-3 text-xs font-bold uppercase tracking-wide text-text-muted">
               Informasi Customer
             </p>
@@ -245,8 +233,8 @@ export function TambahPesananPage() {
                 onClick={() => setCustomerMode("pilih")}
                 className={`rounded-full border px-3 py-1.5 text-xs font-bold ${
                   customerMode === "pilih"
-                    ? "border-text-main bg-text-main text-white"
-                    : "border-slate-200 bg-white text-text-secondary"
+                    ? "border-brand bg-brand text-[#10231a]"
+                    : "border-line bg-surface-2 text-text-secondary"
                 }`}
               >
                 Customer lama
@@ -256,8 +244,8 @@ export function TambahPesananPage() {
                 onClick={() => setCustomerMode("baru")}
                 className={`rounded-full border px-3 py-1.5 text-xs font-bold ${
                   customerMode === "baru"
-                    ? "border-text-main bg-text-main text-white"
-                    : "border-slate-200 bg-white text-text-secondary"
+                    ? "border-brand bg-brand text-[#10231a]"
+                    : "border-line bg-surface-2 text-text-secondary"
                 }`}
               >
                 Customer baru
@@ -337,13 +325,13 @@ export function TambahPesananPage() {
             </Field>
           </div>
 
-          {/* Preview fee otomatis (D5: 50% penjoki + 50% owner) */}
+          {/* Preview fee otomatis (revisi: 50/23/7/20 dari harga) */}
           {Number(harga) > 0 && (
-            <div className="rounded-xl border border-brand-border bg-brand-soft px-4 py-3 text-sm">
-              <p className="mb-1 text-xs font-bold uppercase tracking-wide text-brand">
+            <div className="rounded-xl border border-brand-border bg-brand/10 px-4 py-3 text-sm">
+              <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gold">
                 Pembagian Fee (otomatis)
               </p>
-              <div className="flex flex-wrap gap-x-6 gap-y-1 tabular-nums">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 tabular">
                 <span className="text-text-secondary">
                   Penjoki (50%):{" "}
                   <strong className="text-text-main">
@@ -351,30 +339,25 @@ export function TambahPesananPage() {
                   </strong>
                 </span>
                 <span className="text-text-secondary">
-                  Owner (50%):{" "}
+                  Admin CS (23%):{" "}
+                  <strong className="text-text-main">
+                    {rupiah(hitungFee(Number(harga)).feeAdmin)}
+                  </strong>
+                </span>
+                <span className="text-text-secondary">
+                  Admin Sosmed (7%):{" "}
+                  <strong className="text-text-main">
+                    {rupiah(hitungFee(Number(harga)).feeSosmed)}
+                  </strong>
+                </span>
+                <span className="text-text-secondary">
+                  Owner (20%):{" "}
                   <strong className="text-text-main">
                     {rupiah(hitungFee(Number(harga)).feeOwner)}
                   </strong>
                 </span>
               </div>
             </div>
-          )}
-
-          {/* Fee admin manual — hanya owner yang mengisi (D5) */}
-          {isOwner && (
-            <Field
-              label="Fee Admin (Rp) — isi manual"
-              hint="Owner menghitung sendiri; kosongkan bila tidak ada. Tidak ikut hitungan 50/50."
-            >
-              <input
-                type="number"
-                min={0}
-                placeholder="0"
-                value={feeAdminManual}
-                onChange={(e) => setFeeAdminManual(e.target.value)}
-                className={inputCls}
-              />
-            </Field>
           )}
 
           {/* Penjoki */}
@@ -464,7 +447,7 @@ export function TambahPesananPage() {
           </Field>
 
           {error && (
-            <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-danger">
+            <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm font-semibold text-danger">
               {error}
             </p>
           )}

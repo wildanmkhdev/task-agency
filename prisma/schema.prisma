@@ -138,11 +138,13 @@ model Pesanan {
   penjoki      Penjoki    @relation(fields: [penjokiId], references: [id])
   /// Harga ke customer (Rp, integer)
   harga Int
-  /// Fee Admin CS — ISI MANUAL oleh owner per transaksi (bukan formula; D5)
+  /// Fee Admin CS — otomatis 23% dari harga (revisi client 2 Nov 2026)
   feeAdmin Int @default(0) @map("fee_admin")
-  /// Fee Owner (D5 final: otomatis 50% dari harga)
+  /// Fee Owner — otomatis 20% dari harga (revisi client 2 Nov 2026)
   feeOwner Int @default(0) @map("fee_owner")
-  /// Fee Penjoki (D5 final: otomatis 50% dari harga)
+  /// Fee Penjoki — otomatis 50% dari harga (revisi client 2 Nov 2026)
+  /// Fee Admin Sosmed (7%) dihitung saat rekap dari total pendapatan,
+  /// tidak disimpan per transaksi.
   feePenjoki Int @default(0) @map("fee_penjoki")
   /// Jumlah/keterangan, mis. "1 laporan", "3 bab"
   jumlahKeterangan String @map("jumlah_keterangan")

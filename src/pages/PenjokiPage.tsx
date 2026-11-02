@@ -14,11 +14,11 @@ import {
   TeamTabs,
   inputCls,
 } from "../components/ui";
+import { MagnifyingGlassIcon } from "../components/icons";
 
 /**
- * Daftar Penjoki & Rate Keaktifan (tampilan-saja).
- * CRUD penuh (add/edit/hapus/rating/kategori) ada di menu khusus owner
- * "Manajemen Penjoki" (/penjoki/manajemen).
+ * Laporan rate keaktifan penjoki (tampilan-saja).
+ * CRUD penuh ada di menu "Data Penjoki dan Admin" (/penjoki/manajemen).
  * RATE_PROVISIONAL: formula sementara = tugas selesai + lunas
  * dibanding total pesanan bulan berjalan. Formula final menunggu keputusan D6.
  */
@@ -78,38 +78,109 @@ export function PenjokiPage() {
   );
 
   return (
-    <div className="space-y-5">
-      <p className="max-w-2xl text-sm text-text-secondary">
-        Lihat daftar penjoki, tim, dan tingkat keaktifannya.{" "}
-        <strong>Rate</strong> dihitung dari tugas yang selesai + lunas pada
-        bulan berjalan — formula final menyusul konfirmasi client.
-        Untuk <strong>tambah/edit/hapus penjoki, rating &amp; kategori</strong>,
-        gunakan menu <strong>Manajemen Penjoki</strong>
+    <div className="space-y-4">
+      <p className="rounded-2xl border border-brand-border/50 bg-brand/5 px-4 py-3 text-[11px] leading-relaxed text-text-secondary">
+        Laporan kinerja penjoki: daftar penjoki, tim, dan tingkat keaktifannya.{" "}
+        <strong className="text-text-main">Rate</strong> dihitung dari tugas yang
+        selesai + lunas pada bulan berjalan. Untuk mengubah data penjoki, buka
+        menu <strong className="text-text-main">Data Penjoki dan Admin</strong>
         {!isOwner && " (terkunci ke tim Anda)"}.
       </p>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <input
-          placeholder="Cari nama penjoki…"
-          value={cari}
-          onChange={(e) => setCari(e.target.value)}
-          className={`${inputCls} w-full max-w-xs`}
-        />
-        <Button variant="primary" onClick={() => navigate("/penjoki/manajemen")}>
-          ⚙️ Kelola Penjoki
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <MagnifyingGlassIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+          <input
+            placeholder="Cari nama penjoki…"
+            value={cari}
+            onChange={(e) => setCari(e.target.value)}
+            className={`${inputCls} pl-10`}
+          />
+        </div>
+        <Button
+          variant="primary"
+          onClick={() => navigate("/penjoki/manajemen")}
+          className="shrink-0"
+        >
+          Kelola
         </Button>
       </div>
 
       {isOwner && <TeamTabs teams={teams} value={teamFilter} onChange={setTeamFilter} />}
 
-      <Card className="overflow-hidden">
+      {/* Kartu penjoki (mobile) */}
+      <div className="space-y-2 sm:hidden">
+        {list.length === 0 ? (
+          <Card>
+            <EmptyState
+              title="Tidak ada penjoki"
+              hint="Ubah filter atau tambah penjoki baru."
+            />
+          </Card>
+        ) : (
+          list.map((p) => {
+            const stat = rateMap.get(p.id);
+            return (
+              <div key={p.id} className="card-premium rounded-2xl px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-brand-border/60 bg-brand/10 text-[11px] font-extrabold text-gold">
+                    {p.nama.slice(0, 2).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-bold text-text-main">
+                      {p.nama}
+                    </p>
+                    <p className="truncate text-[11px] text-text-muted">
+                      {p.team?.nama ?? "-"}
+                      {p.no_hp ? ` · ${p.no_hp}` : ""}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${
+                      p.aktif
+                        ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
+                        : "border-red-400/25 bg-red-400/10 text-danger"
+                    }`}
+                  >
+                    {p.aktif ? "Aktif" : "Nonaktif"}
+                  </span>
+                </div>
+
+                {(p.keahlian ?? []).length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {(p.keahlian ?? []).slice(0, 3).map((k) => (
+                      <span
+                        key={k}
+                        className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[10px] font-semibold text-text-secondary"
+                      >
+                        {k}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-line-soft pt-2.5">
+                  <p className="text-[10px] text-text-muted">
+                    Tugas {stat ? `${stat.selesai}/${stat.total}` : "0"} · Rating{" "}
+                    {p.rating_skill ?? "—"}
+                  </p>
+                  <RateBadge rate={rateOf(p.id)} />
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Tabel penjoki (desktop) */}
+      <Card className="hidden overflow-hidden sm:block">
         {list.length === 0 ? (
           <EmptyState title="Tidak ada penjoki" hint="Ubah filter atau tambah penjoki baru." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-bg-main text-left text-xs uppercase tracking-wide text-text-muted">
+                <tr className="border-b border-line bg-surface-2/60 text-left text-[10px] uppercase tracking-wider text-text-muted">
                   <th className="px-5 py-3 font-bold">Nama Penjoki</th>
                   {isOwner && <th className="px-5 py-3 font-bold">Tim</th>}
                   <th className="px-5 py-3 font-bold">Keahlian</th>
@@ -124,10 +195,10 @@ export function PenjokiPage() {
                   const stat = rateMap.get(p.id);
                   const rate = rateOf(p.id);
                   return (
-                    <tr key={p.id} className="border-b border-slate-100 last:border-0 hover:bg-bg-main">
+                    <tr key={p.id} className="border-b border-line-soft last:border-0 hover:bg-surface-2/50">
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
-                          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-navy text-xs font-extrabold text-white">
+                          <span className="flex h-9 w-9 items-center justify-center rounded-full border border-brand-border/60 bg-brand/10 text-xs font-extrabold text-gold">
                             {p.nama.slice(0, 2).toUpperCase()}
                           </span>
                           <div>
@@ -139,7 +210,7 @@ export function PenjokiPage() {
                         </div>
                       </td>
                       {isOwner && (
-                        <td className="px-5 py-3 text-xs font-bold text-text-secondary">
+                        <td className="whitespace-nowrap px-5 py-3 text-xs font-bold text-text-secondary">
                           {p.team?.nama ?? "-"}
                         </td>
                       )}
@@ -148,7 +219,7 @@ export function PenjokiPage() {
                           {(p.keahlian ?? []).slice(0, 3).map((k) => (
                             <span
                               key={k}
-                              className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-text-secondary"
+                              className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-text-secondary"
                             >
                               {k}
                             </span>
@@ -168,8 +239,8 @@ export function PenjokiPage() {
                         <span
                           className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${
                             p.aktif
-                              ? "border-emerald-200 bg-emerald-50 text-success"
-                              : "border-red-200 bg-red-50 text-danger"
+                              ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
+                              : "border-red-400/25 bg-red-400/10 text-danger"
                           }`}
                         >
                           {p.aktif ? "Aktif" : "Nonaktif"}
@@ -184,7 +255,7 @@ export function PenjokiPage() {
         )}
       </Card>
 
-      <p className="text-xs text-text-muted">
+      <p className="text-[10px] leading-relaxed text-text-muted">
         💡 Penjoki dengan rate tinggi bisa dipertimbangkan untuk membantu tim yang
         kekurangan tenaga (rekomendasi antar tim — pengembangan Fase 4).
       </p>

@@ -1,50 +1,60 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
-import type { Penjoki as PenjokiRow } from "../lib/types";
+import { useAuth } from "../context/AuthContext";
+import { awalBulanIni, yyyyMmDd } from "../lib/format";
+import type { Penjoki as PenjokiRow, Profile } from "../lib/types";
+import {
+  jenisAdmin,
+  keteranganJabatan,
+  labelJabatan,
+  namaTampil,
+  urutkanAdmin,
+} from "../lib/admin";
 import {
   Button,
   Card,
   EmptyState,
   Field,
+  RateBadge,
   Spinner,
-  StatCard,
   TeamTabs,
   inputCls,
 } from "../components/ui";
 import {
-  CheckCircleIcon,
+  ChevronRightIcon,
+  FunnelIcon,
+  MagnifyingGlassIcon,
   PencilSquareIcon,
   PlusIcon,
-  StarIcon,
-  TagIcon,
   TrashIcon,
-  UsersIcon,
   XMarkIcon,
 } from "../components/icons";
 
+type Tab = "penjoki" | "admin";
+
 /**
- * Manajemen Penjoki — untuk OWNER & ADMIN, data terintegrasi (satu tabel):
- * - Owner : semua tim.
- * - Admin : HANYA timnya sendiri (query di-scope + RLS database).
- * Fitur: tambah, edit, hapus (permanen), nonaktifkan, rating skill,
- * kategori/keahlian (chips + rename massal), keterangan, filter tim & kategori.
- *
- * Hapus permanen diblokir bila penjoki punya riwayat pesanan (FK RESTRICT) —
- * disarankan pakai Nonaktifkan.
+ * Data Penjoki dan Admin (revisi client):
+ * - Tab: Penjoki | Admin
+ * - Penjoki: Nama, Tim, Rate, Keahlian, Tugas bulan ini, Status
+ * - Admin: nama + jabatan di bawahnya (tanpa angka urut)
+ * - Akun penjoki nanti hanya untuk melihat rate.
  */
 export function PenjokiManajemenPage() {
   const { profile, isOwner, teams, teamFilter, setTeamFilter, scopedTeamId, applyScope } =
     useScope();
+  const { profile: me } = useAuth();
   const qc = useQueryClient();
   const formRef = useRef<HTMLDivElement>(null);
 
+  const [tab, setTab] = useState<Tab>("penjoki");
+
   // Filter
   const [cari, setCari] = useState("");
-  const [kategoriFilter, setKategoriFilter] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-  const [renameError, setRenameError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"semua" | "aktif" | "nonaktif">("semua");
+  const [filterOpen, setFilterOpen] = useState(false);
 
   // Form tambah/edit
   const [showForm, setShowForm] = useState(false);
@@ -67,24 +77,38 @@ export function PenjokiManajemenPage() {
     queryKey: ["penjoki-manajemen", scopedTeamId],
     queryFn: async (): Promise<PenjokiRow[]> => {
       let q = supabase.from("penjoki").select("*, team:teams(nama)").order("nama");
-      q = applyScope(q as never) as typeof q; // admin = timnya sendiri, owner = filter
+      q = applyScope(q as never) as typeof q;
       const { data, error } = await q;
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  // Jumlah pesanan per penjoki (untuk pengaman hapus — lihat catatan FK)
-  const { data: pesananCounts } = useQuery({
-    queryKey: ["penjoki-pesanan-count"],
+  // Tugas bulan ini per penjoki (revisi: kolom "Tugas bulan ini")
+  const { data: tugasBulanIni } = useQuery({
+    queryKey: ["penjoki-tugas-bulan-ini"],
     queryFn: async (): Promise<Map<string, number>> => {
-      // NOTE: PostgREST membatasi baris per request (default 1000 di Supabase);
-      // bila riwayat pesanan sudah besar, ganti dengan RPC agregat di server.
-      const { data, error } = await supabase.from("pesanan").select("penjoki_id");
+      const { data, error } = await supabase
+        .from("pesanan")
+        .select("penjoki_id, tanggal")
+        .gte("tanggal", awalBulanIni());
       if (error) throw error;
       const m = new Map<string, number>();
       for (const r of data ?? []) m.set(r.penjoki_id, (m.get(r.penjoki_id) ?? 0) + 1);
       return m;
+    },
+  });
+
+  // Daftar admin (owner = semua, admin = dirinya sendiri via RLS)
+  const { data: admins } = useQuery({
+    queryKey: ["admins-data-tim"],
+    queryFn: async (): Promise<Profile[]> => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, role, team_id, nama_lengkap, no_hp, aktif, team:teams(nama)")
+        .eq("role", "ADMIN");
+      if (error) throw error;
+      return (data ?? []) as unknown as Profile[];
     },
   });
 
@@ -100,23 +124,24 @@ export function PenjokiManajemenPage() {
 
   const stats = useMemo(() => {
     const aktif = semuaPenjoki.filter((p) => p.aktif).length;
-    const terisi = semuaPenjoki.filter((p) => p.rating_skill != null);
-    const avg =
-      terisi.length > 0
-        ? Math.round(
-            (terisi.reduce((s, p) => s + (p.rating_skill ?? 0), 0) / terisi.length) * 10
-          ) / 10
-        : null;
-    return { aktif, avg };
-  }, [semuaPenjoki]);
+    return {
+      aktif,
+      nonaktif: semuaPenjoki.length - aktif,
+      jenis: kategoriList.length,
+    };
+  }, [semuaPenjoki, kategoriList]);
+
+  const editing = semuaPenjoki.find((p) => p.id === editingId) ?? null;
+
+  const daftarAdmin = useMemo(() => {
+    const base = urutkanAdmin(admins ?? []);
+    return isOwner ? base : base.filter((a) => a.id === me?.id);
+  }, [admins, isOwner, me?.id]);
 
   const list = semuaPenjoki.filter((p) => {
     if (cari && !p.nama.toLowerCase().includes(cari.toLowerCase())) return false;
-    if (
-      kategoriFilter &&
-      !(p.keahlian ?? []).some((k) => k.toLowerCase() === kategoriFilter.toLowerCase())
-    )
-      return false;
+    if (statusFilter === "aktif" && !p.aktif) return false;
+    if (statusFilter === "nonaktif" && p.aktif) return false;
     return true;
   });
 
@@ -124,7 +149,7 @@ export function PenjokiManajemenPage() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["penjoki-manajemen"] });
     qc.invalidateQueries({ queryKey: ["penjoki"] });
-    qc.invalidateQueries({ queryKey: ["penjoki-pesanan-count"] });
+    qc.invalidateQueries({ queryKey: ["penjoki-tugas-bulan-ini"] });
   };
 
   const resetForm = () => {
@@ -143,7 +168,6 @@ export function PenjokiManajemenPage() {
   const bukaTambah = () => {
     resetForm();
     setShowForm(true);
-    // Admin terkunci ke timnya sendiri; owner bebas memilih (default tim pertama/filter)
     setFTim(scopedTeamId ?? teams[0]?.id ?? "");
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -165,14 +189,13 @@ export function PenjokiManajemenPage() {
     mutationFn: async () => {
       const nama = fNama.trim();
       if (!nama) throw new Error("Nama wajib diisi.");
-      // Admin selalu dipaksa ke timnya sendiri (bukan pilihan form)
       const timFinal = isOwner ? fTim : (profile?.team_id ?? "");
       if (!timFinal) throw new Error("Tim wajib dipilih.");
       let rating: number | null = null;
       if (fRating.trim()) {
         rating = Number(fRating);
         if (!Number.isFinite(rating) || rating < 0 || rating > 100)
-          throw new Error("Rating skill harus antara 0–100.");
+          throw new Error("Rate harus antara 0–100.");
       }
       const payload = {
         nama,
@@ -209,7 +232,6 @@ export function PenjokiManajemenPage() {
     mutationFn: async (p: PenjokiRow) => {
       const { error } = await supabase.from("penjoki").delete().eq("id", p.id);
       if (error) {
-        // FK RESTRICT: penjoki masih punya riwayat pesanan
         if (error.code === "23503")
           throw new Error(
             "Penjoki masih punya riwayat pesanan sehingga tidak bisa dihapus permanen. Gunakan Nonaktifkan sebagai gantinya."
@@ -225,38 +247,6 @@ export function PenjokiManajemenPage() {
     onError: (e) => setHapusError((e as Error).message),
   });
 
-  const renameKategori = useMutation({
-    mutationFn: async () => {
-      const asal = kategoriFilter;
-      const baru = renameValue.trim();
-      if (!asal) throw new Error("Pilih kategori dulu.");
-      if (!baru) throw new Error("Nama kategori baru wajib diisi.");
-      if (baru.toLowerCase() === asal.toLowerCase())
-        throw new Error("Nama baru sama dengan kategori asal.");
-      const target = semuaPenjoki.filter((p) =>
-        (p.keahlian ?? []).some((k) => k.toLowerCase() === asal.toLowerCase())
-      );
-      if (target.length === 0) throw new Error("Tidak ada penjoki dengan kategori ini.");
-      const results = await Promise.all(
-        target.map((p) => {
-          const keahlian = (p.keahlian ?? []).map((k) =>
-            k.toLowerCase() === asal.toLowerCase() ? baru : k
-          );
-          return supabase.from("penjoki").update({ keahlian }).eq("id", p.id);
-        })
-      );
-      const gagal = results.find((r) => r.error);
-      if (gagal) throw new Error(gagal.error?.message ?? "Gagal rename kategori.");
-    },
-    onSuccess: () => {
-      setKategoriFilter(null);
-      setRenameValue("");
-      setRenameError(null);
-      invalidate();
-    },
-    onError: (e) => setRenameError((e as Error).message),
-  });
-
   // ---- Kategori (tag input) ----
   const addTag = (raw: string) => {
     const t = raw.trim().replace(/,+$/, "");
@@ -270,8 +260,6 @@ export function PenjokiManajemenPage() {
   };
   const removeTag = (k: string) => setFKeahlian((cur) => cur.filter((x) => x !== k));
 
-  if (isLoading) return <Spinner label="Memuat data penjoki…" />;
-
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -279,455 +267,591 @@ export function PenjokiManajemenPage() {
   };
 
   const saranKategori = kategoriList
-    .filter(
-      ([k]) => !fKeahlian.some((x) => x.toLowerCase() === k.toLowerCase())
-    )
+    .filter(([k]) => !fKeahlian.some((x) => x.toLowerCase() === k.toLowerCase()))
     .slice(0, 8);
 
+  if (isLoading) return <Spinner label="Memuat data tim…" />;
+
   return (
-    <div className="space-y-5">
-      {/* Header + aksi utama */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="max-w-2xl text-sm text-text-secondary">
-          Kelola data penjoki: <strong>tambah, edit, hapus, rating, kategori</strong>,
-          dan keterangan. Owner mengelola <strong>semua tim</strong>; admin hanya{" "}
-          <strong>timnya sendiri</strong> (terkunci otomatis).
-        </p>
-        <Button variant="primary" onClick={bukaTambah}>
-          <PlusIcon className="h-4 w-4" />
-          Tambah Penjoki
-        </Button>
+    <div className="space-y-4">
+      {/* Tabs — Penjoki | Admin CS */}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => setTab("penjoki")}
+          className={`rounded-full py-2.5 text-[13px] font-bold transition-all ${
+            tab === "penjoki"
+              ? "bg-brand text-[#10231a] shadow-[0_8px_20px_-12px_rgba(217,180,95,0.9)]"
+              : "border border-line bg-surface-2 text-text-secondary hover:border-brand-border"
+          }`}
+        >
+          Penjoki
+        </button>
+        <button
+          onClick={() => setTab("admin")}
+          className={`rounded-full py-2.5 text-[13px] font-bold transition-all ${
+            tab === "admin"
+              ? "bg-brand text-[#10231a] shadow-[0_8px_20px_-12px_rgba(217,180,95,0.9)]"
+              : "border border-line bg-surface-2 text-text-secondary hover:border-brand-border"
+          }`}
+        >
+          Admin CS
+        </button>
       </div>
 
-      {/* Statistik */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Total Penjoki"
-          value={String(semuaPenjoki.length)}
-          sub={`${stats.aktif} aktif · ${semuaPenjoki.length - stats.aktif} nonaktif`}
-          icon={<UsersIcon className="h-6 w-6" />}
-          accent="navy"
-        />
-        <StatCard
-          label="Penjoki Aktif"
-          value={String(stats.aktif)}
-          sub="siap menerima job"
-          icon={<CheckCircleIcon className="h-6 w-6" />}
-          accent="success"
-        />
-        <StatCard
-          label="Rata-rata Rating"
-          value={stats.avg != null ? String(stats.avg) : "—"}
-          sub="rating skill 0–100"
-          icon={<StarIcon className="h-6 w-6" />}
-          accent="brand"
-        />
-        <StatCard
-          label="Kategori Keahlian"
-          value={String(kategoriList.length)}
-          sub="kategori unik terdaftar"
-          icon={<TagIcon className="h-6 w-6" />}
-          accent="warning"
-        />
-      </div>
-
-      {/* Form tambah / edit */}
-      {showForm && (
-        <div ref={formRef} className="scroll-mt-24">
-          <Card className="p-5">
-            <div className="mb-4 flex items-center justify-between gap-2">
-              <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
-                {editingId ? "Edit Penjoki" : "Tambah Penjoki Baru"}
-              </p>
-              <Button variant="ghost" onClick={resetForm}>
-                Batal
-              </Button>
-            </div>
-
-            <form onSubmit={onSubmit} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Nama">
-                  <input
-                    value={fNama}
-                    onChange={(e) => setFNama(e.target.value)}
-                    className={inputCls}
-                    placeholder="Nama penjoki"
-                  />
-                </Field>
-                <Field label="No. WhatsApp">
-                  <input
-                    value={fWa}
-                    onChange={(e) => setFWa(e.target.value)}
-                    className={inputCls}
-                    placeholder="08xx"
-                  />
-                </Field>
-                <Field
-                  label="Tim"
-                  hint={isOwner ? undefined : "Admin hanya bisa mengelola timnya sendiri."}
-                >
-                  <select
-                    value={fTim}
-                    onChange={(e) => setFTim(e.target.value)}
-                    disabled={!isOwner}
-                    className={inputCls}
-                  >
-                    {!isOwner && profile?.team_id && (
-                      <option value={profile.team_id}>
-                        {teams.find((t) => t.id === profile.team_id)?.nama ?? "Tim saya"}
-                      </option>
-                    )}
-                    {isOwner && (
-                      <option value="">— Pilih tim —</option>
-                    )}
-                    {isOwner &&
-                      teams.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.nama}
-                        </option>
-                      ))}
-                  </select>
-                </Field>
-                <Field label="Rating Skill (0–100)" hint="Kosongkan bila belum tahu.">
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={fRating}
-                    onChange={(e) => setFRating(e.target.value)}
-                    className={inputCls}
-                    placeholder="85"
-                  />
-                </Field>
-              </div>
-
-              {/* Kategori / keahlian — chip input */}
-              <Field label="Kategori / Keahlian" hint="Tekan Enter atau klik + untuk menambah.">
-                <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white p-2.5 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/20">
-                  {fKeahlian.map((k) => (
-                    <span
-                      key={k}
-                      className="inline-flex items-center gap-1 rounded-full border border-brand-border bg-brand-soft px-2.5 py-0.5 text-xs font-bold text-brand"
-                    >
-                      {k}
-                      <button
-                        type="button"
-                        onClick={() => removeTag(k)}
-                        className="rounded-full p-0.5 hover:bg-brand hover:text-white"
-                        aria-label={`Hapus kategori ${k}`}
-                      >
-                        <XMarkIcon className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
-                  <input
-                    list="saran-kategori-manajemen"
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === ",") {
-                        e.preventDefault();
-                        addTag(tagInput);
-                      }
-                    }}
-                    placeholder={
-                      fKeahlian.length === 0 ? "Laporan PKL, PPT, Makalah…" : "Tambah…"
-                    }
-                    className="min-w-32 flex-1 border-0 bg-transparent px-1 py-0.5 text-sm outline-none placeholder:text-text-muted"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => addTag(tagInput)}
-                    className="rounded-lg bg-brand p-1.5 text-white transition-colors hover:bg-brand-hover"
-                    aria-label="Tambah kategori"
-                  >
-                    <PlusIcon className="h-4 w-4" />
-                  </button>
-                  <datalist id="saran-kategori-manajemen">
-                    {kategoriList.map(([k]) => (
-                      <option key={k} value={k} />
-                    ))}
-                  </datalist>
-                </div>
-                {saranKategori.length > 0 && (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    <span className="text-[11px] text-text-muted">Saran:</span>
-                    {saranKategori.map(([k, n]) => (
-                      <button
-                        key={k}
-                        type="button"
-                        onClick={() => addTag(k)}
-                        className="rounded-full border border-dashed border-slate-300 px-2 py-0.5 text-[11px] font-semibold text-text-secondary transition-colors hover:border-brand hover:text-brand"
-                      >
-                        + {k} <span className="text-text-muted">({n})</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </Field>
-
-              <Field
-                label="Keterangan"
-                hint="Ketersediaan, kelebihan, batasan, dll. — tampil di tabel."
-              >
-                <textarea
-                  rows={2}
-                  value={fKeterangan}
-                  onChange={(e) => setFKeterangan(e.target.value)}
-                  className={`${inputCls} resize-y`}
-                  placeholder="Fast response, teliti, hanya menerima tenggat H-1…"
-                />
-              </Field>
-
-              {formError && (
-                <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-danger">
-                  {formError}
-                </p>
-              )}
-
-              <Button
-                type="submit"
-                variant="success"
-                disabled={simpan.isPending}
-                className="w-full sm:w-auto"
-              >
-                {simpan.isPending
-                  ? "Menyimpan…"
-                  : editingId
-                    ? "Simpan Perubahan"
-                    : "Simpan Penjoki"}
-              </Button>
-            </form>
-          </Card>
-        </div>
-      )}
-
-      {/* Panel kategori + rename massal */}
-      <Card className="p-5">
-        <div className="mb-3 flex items-center gap-2">
-          <TagIcon className="h-5 w-5 text-brand" />
-          <div>
-            <h3 className="font-display text-sm font-extrabold text-text-main">
-              Kategori Keahlian
-            </h3>
-            <p className="text-xs text-text-muted">
-              Klik untuk filter — {kategoriList.length} kategori unik
-            </p>
-          </div>
-        </div>
-
-        {kategoriList.length === 0 ? (
-          <EmptyState title="Belum ada kategori" hint="Tambahkan saat membuat/edit penjoki." />
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {kategoriList.map(([k, n]) => {
-              const active = kategoriFilter === k;
-              return (
-                <button
-                  key={k}
-                  onClick={() => {
-                    setKategoriFilter(active ? null : k);
-                    setRenameValue(active ? "" : k);
-                    setRenameError(null);
-                  }}
-                  className={`rounded-full border px-3 py-1 text-xs font-bold transition-all ${
-                    active
-                      ? "border-brand bg-brand text-white"
-                      : "border-slate-200 bg-white text-text-secondary hover:border-brand hover:text-brand"
-                  }`}
-                >
-                  {k} <span className={active ? "text-sky-100" : "text-text-muted"}>×{n}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {kategoriFilter && (
-          <div className="mt-4 rounded-xl border border-slate-200 bg-bg-main p-3">
-            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-text-muted">
-              Rename kategori “{kategoriFilter}” di semua penjoki
-            </p>
-            <div className="flex flex-wrap gap-2">
+      {tab === "penjoki" ? (
+        <>
+          {/* Pencarian + filter (mockup) */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <MagnifyingGlassIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
               <input
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                className={`${inputCls} w-full max-w-xs`}
-                placeholder="Nama kategori baru"
+                placeholder="Cari nama penjoki…"
+                value={cari}
+                onChange={(e) => setCari(e.target.value)}
+                className={`${inputCls} pl-10`}
               />
-              <Button
-                variant="primary"
-                disabled={renameKategori.isPending}
-                onClick={() => renameKategori.mutate()}
-              >
-                {renameKategori.isPending ? "Mengganti…" : "Ganti Nama"}
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setKategoriFilter(null);
-                  setRenameValue("");
-                  setRenameError(null);
-                }}
-              >
-                Batal
-              </Button>
             </div>
-            {(renameError || renameKategori.isError) && (
-              <p className="mt-2 text-sm font-semibold text-danger">
-                {renameError ??
-                  (renameKategori.error as Error | null)?.message ??
-                  "Gagal rename."}
-              </p>
-            )}
-          </div>
-        )}
-      </Card>
+            <div className="relative">
+              <button
+                onClick={() => setFilterOpen((v) => !v)}
+                className={`rounded-xl border p-2.5 transition-colors ${
+                  statusFilter !== "semua" || (isOwner && teamFilter)
+                    ? "border-brand-border bg-brand/15 text-gold"
+                    : "border-line bg-surface-2 text-text-secondary hover:text-gold"
+                }`}
+                aria-label="Filter"
+              >
+                <FunnelIcon className="h-4.5 w-4.5" />
+              </button>
+              {filterOpen && (
+                <div className="absolute right-0 top-full z-20 mt-1.5 w-44 overflow-hidden rounded-xl border border-line bg-surface-2 shadow-xl">
+                  <p className="px-3.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                    Status
+                  </p>
+                  {(
+                    [
+                      ["semua", "Semua"],
+                      ["aktif", "Aktif"],
+                      ["nonaktif", "Nonaktif"],
+                    ] as const
+                  ).map(([v, l]) => (
+                    <button
+                      key={v}
+                      onClick={() => setStatusFilter(v)}
+                      className={`block w-full px-3.5 py-2 text-left text-xs font-bold ${
+                        statusFilter === v
+                          ? "bg-brand/15 text-gold"
+                          : "text-text-secondary hover:bg-surface-3"
+                      }`}
+                    >
+                      {l}
+                    </button>
+                  ))}
 
-      {/* Filter tim (owner) + cari */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {isOwner ? (
-          <TeamTabs teams={teams} value={teamFilter} onChange={setTeamFilter} />
-        ) : (
-          <span className="inline-flex items-center gap-2 rounded-full border border-brand-border bg-brand-soft px-3 py-1 text-xs font-bold text-brand">
-            📌 Mengelola: {teams.find((t) => t.id === profile?.team_id)?.nama ?? "Tim saya"}
-          </span>
-        )}
-        <input
-          placeholder="Cari nama penjoki…"
-          value={cari}
-          onChange={(e) => setCari(e.target.value)}
-          className={`${inputCls} w-full max-w-xs`}
-        />
-      </div>
-
-      {/* Tabel */}
-      <Card className="overflow-hidden">
-        {list.length === 0 ? (
-          <EmptyState
-            title="Tidak ada penjoki"
-            hint="Ubah filter, atau tambah penjoki baru."
-          />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-bg-main text-left text-xs uppercase tracking-wide text-text-muted">
-                  <th className="px-5 py-3 font-bold">Nama Penjoki</th>
-                  <th className="px-5 py-3 font-bold">Tim</th>
-                  <th className="px-5 py-3 font-bold">Kategori</th>
-                  <th className="px-5 py-3 text-center font-bold">Rating</th>
-                  <th className="px-5 py-3 font-bold">Keterangan</th>
-                  <th className="px-5 py-3 text-center font-bold">Pesanan</th>
-                  <th className="px-5 py-3 font-bold">Status</th>
-                  <th className="px-5 py-3 text-right font-bold">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-b border-slate-100 last:border-0 hover:bg-bg-main"
-                  >
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-extrabold text-white">
-                          {p.nama.slice(0, 2).toUpperCase()}
-                        </span>
-                        <div>
-                          <p className="font-bold text-text-main">{p.nama}</p>
-                          {p.no_hp && (
-                            <p className="text-xs text-text-muted">{p.no_hp}</p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 text-xs font-bold text-text-secondary">
-                      {p.team?.nama ?? "-"}
-                    </td>
-                    <td className="px-5 py-3">
-                      <div className="flex max-w-56 flex-wrap gap-1">
-                        {(p.keahlian ?? []).length === 0 ? (
-                          <span className="text-xs text-text-muted">—</span>
-                        ) : (
-                          (p.keahlian ?? []).map((k) => (
-                            <span
-                              key={k}
-                              className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-text-secondary"
-                            >
-                              {k}
-                            </span>
-                          ))
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 text-center">
-                      <span className="inline-flex items-center gap-1 font-bold tabular-nums text-text-main">
-                        <StarIcon className="h-4 w-4 text-warning" />
-                        {p.rating_skill ?? "—"}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3">
-                      <p
-                        className="max-w-52 truncate text-xs text-text-secondary"
-                        title={p.keterangan ?? ""}
-                      >
-                        {p.keterangan ?? "—"}
+                  {isOwner && teams.length > 0 && (
+                    <>
+                      <p className="border-t border-line-soft px-3.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                        Tim
                       </p>
-                    </td>
-                    <td className="px-5 py-3 text-center font-semibold tabular-nums">
-                      {pesananCounts?.get(p.id) ?? 0}
-                    </td>
-                    <td className="px-5 py-3">
-                      <span
-                        className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${
-                          p.aktif
-                            ? "border-emerald-200 bg-emerald-50 text-success"
-                            : "border-red-200 bg-red-50 text-danger"
+                      <button
+                        onClick={() => setTeamFilter(null)}
+                        className={`block w-full px-3.5 py-2 text-left text-xs font-bold ${
+                          !teamFilter
+                            ? "bg-brand/15 text-gold"
+                            : "text-text-secondary hover:bg-surface-3"
                         }`}
                       >
-                        {p.aktif ? "Aktif" : "Nonaktif"}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="ghost" onClick={() => mulaiEdit(p)}>
-                          <PencilSquareIcon className="h-4 w-4" />
-                          Edit
-                        </Button>
-                        <Button variant="ghost" onClick={() => toggleAktif.mutate(p)}>
-                          {p.aktif ? "Nonaktifkan" : "Aktifkan"}
+                        Semua Tim
+                      </button>
+                      {teams.map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => setTeamFilter(t.id)}
+                          className={`block w-full px-3.5 py-2 text-left text-xs font-bold ${
+                            teamFilter === t.id
+                              ? "bg-brand/15 text-gold"
+                              : "text-text-secondary hover:bg-surface-3"
+                          }`}
+                        >
+                          {t.nama}
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="hidden shrink-0 sm:block">
+              <Button variant="primary" onClick={bukaTambah}>
+                <PlusIcon className="h-4 w-4" />
+                Tambah Penjoki
+              </Button>
+            </div>
+          </div>
+
+          {/* Statistik ringkas (mockup: Total Penjoki / Aktif / Nonaktif) */}
+          <div className="grid grid-cols-3 gap-2.5">
+            <div className="card-premium rounded-2xl px-3 py-3.5 text-center sm:text-left">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                Total Penjoki
+              </p>
+              <p className="mt-1.5 font-display text-xl font-extrabold text-text-main tabular">
+                {semuaPenjoki.length}
+              </p>
+            </div>
+            <div className="card-premium rounded-2xl border-emerald-400/25 px-3 py-3.5 text-center sm:text-left">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                Aktif
+              </p>
+              <p className="mt-1.5 font-display text-xl font-extrabold text-emerald-300 tabular">
+                {stats.aktif}
+              </p>
+            </div>
+            <div className="card-premium rounded-2xl border-red-400/20 px-3 py-3.5 text-center sm:text-left">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                Nonaktif
+              </p>
+              <p className="mt-1.5 font-display text-xl font-extrabold text-danger tabular">
+                {stats.nonaktif}
+              </p>
+            </div>
+          </div>
+
+          {/* Filter tim lengkap (desktop) */}
+          <div className="hidden sm:block">
+            {isOwner ? (
+              <TeamTabs teams={teams} value={teamFilter} onChange={setTeamFilter} />
+            ) : (
+              <span className="inline-flex w-fit items-center gap-2 rounded-full border border-brand-border bg-brand/10 px-3 py-1 text-[11px] font-bold text-gold">
+                📌 {teams.find((t) => t.id === profile?.team_id)?.nama ?? "Tim saya"}
+              </span>
+            )}
+          </div>
+
+          {/* Form tambah / edit */}
+          {showForm && (
+            <div ref={formRef} className="scroll-mt-24">
+              <Card className="p-5">
+                <div className="mb-4 flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold uppercase tracking-wide text-text-muted">
+                    {editingId ? "Edit Penjoki" : "Tambah Penjoki Baru"}
+                  </p>
+                  <Button variant="ghost" onClick={resetForm}>
+                    Batal
+                  </Button>
+                </div>
+
+                <form onSubmit={onSubmit} className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Nama">
+                      <input
+                        value={fNama}
+                        onChange={(e) => setFNama(e.target.value)}
+                        className={inputCls}
+                        placeholder="Nama penjoki"
+                      />
+                    </Field>
+                    <Field label="No. WhatsApp">
+                      <input
+                        value={fWa}
+                        onChange={(e) => setFWa(e.target.value)}
+                        className={inputCls}
+                        placeholder="08xx"
+                      />
+                    </Field>
+                    <Field
+                      label="Tim"
+                      hint={isOwner ? undefined : "Admin hanya bisa mengelola timnya sendiri."}
+                    >
+                      <select
+                        value={fTim}
+                        onChange={(e) => setFTim(e.target.value)}
+                        disabled={!isOwner}
+                        className={inputCls}
+                      >
+                        {!isOwner && profile?.team_id && (
+                          <option value={profile.team_id}>
+                            {teams.find((t) => t.id === profile.team_id)?.nama ?? "Tim saya"}
+                          </option>
+                        )}
+                        {isOwner && <option value="">— Pilih tim —</option>}
+                        {isOwner &&
+                          teams.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.nama}
+                            </option>
+                          ))}
+                      </select>
+                    </Field>
+                    <Field label="Rate (0–100)" hint="Kosongkan bila belum tahu.">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={fRating}
+                        onChange={(e) => setFRating(e.target.value)}
+                        className={inputCls}
+                        placeholder="85"
+                      />
+                    </Field>
+                  </div>
+
+                  <Field label="Keahlian" hint="Tekan Enter atau klik + untuk menambah.">
+                    <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-line bg-surface-2 p-2.5 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/20">
+                      {fKeahlian.map((k) => (
+                        <span
+                          key={k}
+                          className="inline-flex items-center gap-1 rounded-full border border-brand-border bg-brand-soft px-2.5 py-0.5 text-xs font-bold text-gold"
+                        >
+                          {k}
+                          <button
+                            type="button"
+                            onClick={() => removeTag(k)}
+                            className="rounded-full p-0.5 hover:bg-brand hover:text-[#10231a]"
+                            aria-label={`Hapus keahlian ${k}`}
+                          >
+                            <XMarkIcon className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                      <input
+                        list="saran-kategori-manajemen"
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === ",") {
+                            e.preventDefault();
+                            addTag(tagInput);
+                          }
+                        }}
+                        placeholder={
+                          fKeahlian.length === 0 ? "Laporan PKL, PPT, Makalah…" : "Tambah…"
+                        }
+                        className="min-w-32 flex-1 border-0 bg-transparent px-1 py-0.5 text-sm outline-none placeholder:text-text-muted"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => addTag(tagInput)}
+                        className="rounded-lg bg-brand p-1.5 text-[#10231a] transition-colors hover:bg-brand-hover"
+                        aria-label="Tambah keahlian"
+                      >
+                        <PlusIcon className="h-4 w-4" />
+                      </button>
+                      <datalist id="saran-kategori-manajemen">
+                        {kategoriList.map(([k]) => (
+                          <option key={k} value={k} />
+                        ))}
+                      </datalist>
+                    </div>
+                    {saranKategori.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] text-text-muted">Saran:</span>
+                        {saranKategori.map(([k, n]) => (
+                          <button
+                            key={k}
+                            type="button"
+                            onClick={() => addTag(k)}
+                            className="rounded-full border border-dashed border-line px-2 py-0.5 text-[11px] font-semibold text-text-secondary transition-colors hover:border-brand hover:text-gold"
+                          >
+                            + {k} <span className="text-text-muted">({n})</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </Field>
+
+                  <Field label="Keterangan" hint="Ketersediaan, kelebihan, batasan, dll.">
+                    <textarea
+                      rows={2}
+                      value={fKeterangan}
+                      onChange={(e) => setFKeterangan(e.target.value)}
+                      className={`${inputCls} resize-y`}
+                      placeholder="Fast response, teliti, hanya menerima tenggat H-1…"
+                    />
+                  </Field>
+
+                  {formError && (
+                    <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm font-semibold text-danger">
+                      {formError}
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      disabled={simpan.isPending}
+                      className="w-full sm:w-auto"
+                    >
+                      {simpan.isPending
+                        ? "Menyimpan…"
+                        : editingId
+                          ? "Simpan Perubahan"
+                          : "Simpan Penjoki"}
+                    </Button>
+                    {editing && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          onClick={() => toggleAktif.mutate(editing)}
+                        >
+                          {editing.aktif ? "Nonaktifkan" : "Aktifkan"}
                         </Button>
                         <Button
                           variant="danger"
                           onClick={() => {
-                            setHapusTarget(p);
+                            setHapusTarget(editing);
                             setHapusError(null);
                           }}
                         >
                           <TrashIcon className="h-4 w-4" />
+                          Hapus
                         </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+                      </>
+                    )}
+                  </div>
+                </form>
+              </Card>
+            </div>
+          )}
 
-      {toggleAktif.isError && (
-        <p className="text-sm font-semibold text-danger">
-          Gagal menyimpan status: {(toggleAktif.error as Error).message}
-        </p>
+          {/* Tabel penjoki (desktop) */}
+          <Card className="hidden overflow-hidden sm:block">
+            {list.length === 0 ? (
+              <EmptyState
+                title="Tidak ada penjoki"
+                hint="Ubah filter, atau tambah penjoki baru."
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-line bg-surface-2/60 text-left text-[10px] uppercase tracking-wider text-text-muted">
+                      <th className="px-4 py-3 font-bold">Nama</th>
+                      <th className="px-4 py-3 font-bold">Tim</th>
+                      <th className="px-4 py-3 font-bold">Rate</th>
+                      <th className="px-4 py-3 font-bold">Keahlian</th>
+                      <th className="px-4 py-3 text-center font-bold">Tugas bulan ini</th>
+                      <th className="px-4 py-3 font-bold">Status</th>
+                      <th className="px-4 py-3 text-right font-bold">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((p) => (
+                      <tr
+                        key={p.id}
+                        className="border-b border-line-soft last:border-0 hover:bg-surface-2/50"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-brand-border/60 bg-brand/10 text-xs font-extrabold text-gold">
+                              {p.nama.slice(0, 2).toUpperCase()}
+                            </span>
+                            <div>
+                              <p className="font-bold text-text-main">{p.nama}</p>
+                              {p.no_hp && (
+                                <p className="text-[11px] text-text-muted">{p.no_hp}</p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-xs font-bold text-text-secondary">
+                          {p.team?.nama ?? "-"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <RateBadge rate={p.rating_skill} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div
+                            className="flex flex-wrap items-center gap-1"
+                            title={(p.keahlian ?? []).join(", ")}
+                          >
+                            {(p.keahlian ?? []).length === 0 ? (
+                              <span className="text-xs text-text-muted">—</span>
+                            ) : (
+                              <>
+                                {(p.keahlian ?? []).slice(0, 3).map((k) => (
+                                  <span
+                                    key={k}
+                                    className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-text-secondary"
+                                  >
+                                    {k}
+                                  </span>
+                                ))}
+                                {(p.keahlian ?? []).length > 3 && (
+                                  <span className="rounded-full border border-brand-border bg-brand/10 px-2 py-0.5 text-[11px] font-bold text-gold">
+                                    +{(p.keahlian ?? []).length - 3}
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center font-semibold text-text-main tabular">
+                          {tugasBulanIni?.get(p.id) ?? 0}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${
+                              p.aktif
+                                ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
+                                : "border-red-400/25 bg-red-400/10 text-danger"
+                            }`}
+                          >
+                            {p.aktif ? "Aktif" : "Nonaktif"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-1.5">
+                            <Button variant="ghost" onClick={() => mulaiEdit(p)}>
+                              <PencilSquareIcon className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" onClick={() => toggleAktif.mutate(p)}>
+                              {p.aktif ? "Nonaktifkan" : "Aktifkan"}
+                            </Button>
+                            <Button
+                              variant="danger"
+                              onClick={() => {
+                                setHapusTarget(p);
+                                setHapusError(null);
+                              }}
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          {/* Daftar penjoki (mobile) — mengikuti mockup */}
+          <div className="space-y-2 pb-16 sm:hidden">
+            {list.length === 0 ? (
+              <Card>
+                <EmptyState
+                  title="Tidak ada penjoki"
+                  hint="Ubah filter, atau tambah penjoki baru."
+                />
+              </Card>
+            ) : (
+              list.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => mulaiEdit(p)}
+                  className="card-premium flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors hover:border-brand-border"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-brand-border/60 bg-brand/10 text-[11px] font-extrabold text-gold">
+                    {p.nama.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-bold text-text-main">
+                      {p.nama}
+                    </span>
+                    <span className="block truncate text-[11px] text-text-muted">
+                      {p.team?.nama ?? "-"} · Rate {p.rating_skill ?? "—"}
+                    </span>
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${
+                      p.aktif
+                        ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
+                        : "border-red-400/25 bg-red-400/10 text-danger"
+                    }`}
+                  >
+                    {p.aktif ? "Aktif" : "Nonaktif"}
+                  </span>
+                  <ChevronRightIcon className="h-4 w-4 shrink-0 text-text-muted" />
+                </button>
+              ))
+            )}
+          </div>
+
+          {/* Tombol tambah mengambang (mobile) */}
+          {!showForm && (
+            <button
+              onClick={bukaTambah}
+              className="fixed bottom-24 right-4 z-20 flex items-center gap-2 rounded-full bg-gradient-to-r from-[#cfa84f] via-[#e0bd68] to-[#e9ca7d] px-4 py-3 text-[12px] font-extrabold text-[#12271f] shadow-[0_14px_30px_-12px_rgba(217,180,95,0.9)] sm:hidden"
+            >
+              <PlusIcon className="h-4 w-4" />
+              Tambah Penjoki
+            </button>
+          )}
+
+          {toggleAktif.isError && (
+            <p className="text-sm font-semibold text-danger">
+              Gagal menyimpan status: {(toggleAktif.error as Error).message}
+            </p>
+          )}
+        </>
+      ) : (
+        /* ---------- TAB ADMIN ---------- */
+        <div className="space-y-2">
+          <p className="px-1 text-[11px] text-text-muted">
+            Jabatan tampil di bawah nama admin. Klik untuk membuka ruangan admin
+            (pendapatan & rincian per admin).
+          </p>
+
+          {daftarAdmin.length === 0 ? (
+            <Card>
+              <EmptyState
+                title="Belum ada admin"
+                hint="Akun admin dibuat oleh owner."
+              />
+            </Card>
+          ) : (
+            daftarAdmin.map((a) => {
+              const sosmed = jenisAdmin(a) === "sosmed";
+              return (
+                <Link
+                  key={a.id}
+                  to={`/rekap/${a.id}?tanggal=${yyyyMmDd(new Date())}`}
+                  className="group flex items-center gap-3 rounded-2xl border border-line bg-surface/80 px-4 py-3.5 transition-all hover:border-brand-border hover:bg-surface-2"
+                >
+                  <span
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xs font-extrabold ${
+                      sosmed
+                        ? "border border-fuchsia-400/30 bg-fuchsia-400/10 text-fuchsia-300"
+                        : "border border-brand-border/60 bg-brand/10 text-gold"
+                    }`}
+                  >
+                    {namaTampil(a).slice(0, 2).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-extrabold text-text-main">
+                      {namaTampil(a)}
+                    </p>
+                    <p className="text-[11px] font-semibold text-gold/90">
+                      {labelJabatan(a)}
+                    </p>
+                    <p className="mt-0.5 line-clamp-1 text-[11px] text-text-muted">
+                      {keteranganJabatan(a)}
+                    </p>
+                  </div>
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4 shrink-0 text-text-muted transition-colors group-hover:text-gold"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.2}
+                  >
+                    <path d="m9 6 6 6-6 6" />
+                  </svg>
+                </Link>
+              );
+            })
+          )}
+        </div>
       )}
 
       {/* Dialog hapus */}
       {hapusTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-text-main/60"
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={() => {
               setHapusTarget(null);
               setHapusError(null);
@@ -735,13 +859,11 @@ export function PenjokiManajemenPage() {
           />
           <Card className="relative w-full max-w-md p-6">
             <div className="mb-3 flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-danger">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-red-400/30 bg-red-400/10 text-danger">
                 <TrashIcon className="h-5 w-5" />
               </span>
               <div>
-                <h3 className="font-display text-base font-extrabold">
-                  Hapus Penjoki?
-                </h3>
+                <h3 className="font-display text-base font-extrabold">Hapus Penjoki?</h3>
                 <p className="text-xs text-text-muted">
                   {hapusTarget.nama} · {hapusTarget.team?.nama ?? "-"}
                 </p>
@@ -749,15 +871,15 @@ export function PenjokiManajemenPage() {
             </div>
 
             <p className="text-sm text-text-secondary">
-              Data akan dihapus <strong>permanen</strong>. Jumlah pesanan terkait:{" "}
-              <strong>{pesananCounts?.get(hapusTarget.id) ?? 0}</strong>.
+              Data akan dihapus <strong>permanen</strong>. Jumlah tugas terkait:{" "}
+              <strong>{tugasBulanIni?.get(hapusTarget.id) ?? 0}</strong>.
               {hapusTarget.aktif &&
-                (pesananCounts?.get(hapusTarget.id) ?? 0) === 0 &&
+                (tugasBulanIni?.get(hapusTarget.id) ?? 0) === 0 &&
                 " Pastikan penjoki benar-benar sudah tidak dipakai."}
             </p>
 
             {hapusError && (
-              <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-danger">
+              <p className="mt-3 rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm font-semibold text-danger">
                 {hapusError}
               </p>
             )}
@@ -772,7 +894,7 @@ export function PenjokiManajemenPage() {
               >
                 Batal
               </Button>
-              {(pesananCounts?.get(hapusTarget.id) ?? 0) === 0 ? (
+              {(tugasBulanIni?.get(hapusTarget.id) ?? 0) === 0 ? (
                 <Button
                   variant="danger"
                   disabled={hapus.isPending}

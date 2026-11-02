@@ -135,6 +135,33 @@ export function ChevronDoubleRightIcon(p: P) {
 }
 
 /** Pengaturan — menu Manajemen Penjoki */
+export function ArrowsRightLeftIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <path d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+    </svg>
+  );
+}
+
+export function UserCircleIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="10" r="3" />
+      <path d="M6.2 18.3a6.5 6.5 0 0 1 11.6 0" />
+    </svg>
+  );
+}
+
+export function ChartPieIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <path d="M12 3a9 9 0 1 0 9 9h-9V3Z" />
+      <path d="M15 3.5A9 9 0 0 1 20.5 9H15V3.5Z" />
+    </svg>
+  );
+}
+
 export function Cog6ToothIcon(p: P) {
   return (
     <svg {...base} {...p}>
@@ -214,6 +241,104 @@ export function CurrencyDollarIcon(p: P) {
     <svg {...base} {...p}>
       <path d="M12 6v12m-2.25-2.25h4.5a2.25 2.25 0 000-4.5h-4.5a2.25 2.25 0 000 4.5zm0 0a2.25 2.25 0 002.25 2.25h2.25" />
       <circle cx="12" cy="12" r="9" />
+    </svg>
+  );
+}
+
+export function CalendarIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <rect x="3" y="5" width="18" height="16" rx="3" />
+      <path d="M8 3v4M16 3v4M3 10h18" />
+    </svg>
+  );
+}
+
+export function LockClosedIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <rect x="4.5" y="10.5" width="15" height="10" rx="2.5" />
+      <path d="M8.25 10.5V7.5a3.75 3.75 0 0 1 7.5 0v3" />
+      <path d="M12 14.5v2" />
+    </svg>
+  );
+}
+
+export function ArrowLeftIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <path d="M19 12H5m0 0 6-6m-6 6 6 6" />
+    </svg>
+  );
+}
+
+export function ChevronRightIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <path d="m9 6 6 6-6 6" />
+    </svg>
+  );
+}
+
+export function MagnifyingGlassIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m16 16 4 4" />
+    </svg>
+  );
+}
+
+export function FunnelIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <path d="M4 5h16l-6 7.5V19l-4 1.5v-8L4 5Z" />
+    </svg>
+  );
+}
+
+export function EyeIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+export function EyeSlashIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <path d="M3 3l18 18" />
+      <path d="M10.6 6.1A10.6 10.6 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3 3.6M6.4 7.1A16.7 16.7 0 0 0 2.5 12S6 18 12 18a10.4 10.4 0 0 0 4.3-.9" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    </svg>
+  );
+}
+
+export function ShieldCheckIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <path d="M12 3.5 5 6v5.5c0 4 2.9 7.7 7 9 4.1-1.3 7-5 7-9V6l-7-2.5Z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
+
+export function InformationCircleIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5M12 8h.01" />
+    </svg>
+  );
+}
+
+export function UserIcon(p: P) {
+  return (
+    <svg {...base} {...p}>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
     </svg>
   );
 }
