@@ -6,7 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { rupiah, tanggalPanjang, tanggalPendek, yyyyMmDd } from "../lib/format";
 import { masukRekap, type Pesanan, type Profile } from "../lib/types";
 import { alokasiFee, BAGI_HASIL, persen } from "../lib/fee";
-import { jenisAdmin, keteranganJabatan, labelJabatan, namaTampil } from "../lib/admin";
+import { jenisAdmin, keteranganJabatan, labelJabatan, namaLengkapAdmin } from "../lib/admin";
 import { Card, EmptyState, Spinner } from "../components/ui";
 
 interface RincianRow {
@@ -120,7 +120,7 @@ export function DetailRekapPage() {
     );
   }
 
-  const nama = namaTampil(admin);
+  const nama = namaLengkapAdmin(admin);
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">

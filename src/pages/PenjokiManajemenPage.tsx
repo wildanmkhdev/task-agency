@@ -10,7 +10,7 @@ import {
   jenisAdmin,
   keteranganJabatan,
   labelJabatan,
-  namaTampil,
+  namaLengkapAdmin,
   urutkanAdmin,
 } from "../lib/admin";
 import {
@@ -818,11 +818,11 @@ export function PenjokiManajemenPage() {
                         : "border border-brand-border/60 bg-brand/10 text-gold"
                     }`}
                   >
-                    {namaTampil(a).slice(0, 2).toUpperCase()}
+                    {namaLengkapAdmin(a).slice(0, 2).toUpperCase()}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-extrabold text-text-main">
-                      {namaTampil(a)}
+                      {namaLengkapAdmin(a)}
                     </p>
                     <p className="text-[11px] font-semibold text-gold/90">
                       {labelJabatan(a)}
@@ -830,6 +830,9 @@ export function PenjokiManajemenPage() {
                     <p className="mt-0.5 line-clamp-1 text-[11px] text-text-muted">
                       {keteranganJabatan(a)}
                     </p>
+                    {a.no_hp && (
+                      <p className="mt-0.5 text-[11px] text-text-muted">{a.no_hp}</p>
+                    )}
                   </div>
                   <svg
                     viewBox="0 0 24 24"

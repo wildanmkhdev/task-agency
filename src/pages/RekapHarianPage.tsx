@@ -6,7 +6,7 @@ import { useScope } from "../hooks/useScope";
 import { useAuth } from "../context/AuthContext";
 import { rupiah, tanggalPanjang, yyyyMmDd } from "../lib/format";
 import { masukRekap, type Pesanan, type Profile } from "../lib/types";
-import { jenisAdmin, namaTampil, urutkanAdmin } from "../lib/admin";
+import { namaLengkapAdmin, urutkanAdmin } from "../lib/admin";
 import { Card, EmptyState, Spinner } from "../components/ui";
 
 const PESANAN_SELECT =
@@ -217,8 +217,7 @@ export function RekapHarianPage() {
         ) : (
           <div className="space-y-2">
             {daftarAdmin.map(({ admin, jumlah, pendapatan }) => {
-              const sosmed = jenisAdmin(admin) === "sosmed";
-              const nama = sosmed ? `${namaTampil(admin)} sosmed` : namaTampil(admin);
+              const nama = namaLengkapAdmin(admin);
               return (
                 <button
                   key={admin.id}

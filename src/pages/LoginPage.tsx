@@ -29,12 +29,13 @@ export function LoginPage() {
 
   return (
     <div className="app-canvas relative flex min-h-screen items-center justify-center overflow-hidden px-5 py-10">
-      {/* Ornamen emas sudut */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-40 -top-40 h-96 w-96 rounded-full border-[22px] border-brand/20" />
-        <div className="absolute -right-36 -bottom-40 h-[26rem] w-[26rem] rounded-full border-[22px] border-brand/15" />
-        <div className="absolute left-0 top-1/3 h-px w-52 -rotate-12 bg-gradient-to-r from-transparent via-brand/50 to-transparent" />
-        <div className="absolute bottom-1/4 right-0 h-px w-52 rotate-12 bg-gradient-to-r from-transparent via-brand/40 to-transparent" />
+      {/* Ornamen emas sudut — tipis, hanya di tepi seperti mockup */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -left-56 -top-56 h-[30rem] w-[30rem] rounded-full border-[26px] border-brand/10" />
+        <div className="absolute -right-64 -bottom-72 h-[38rem] w-[38rem] rounded-full border-[26px] border-brand/10" />
+        <div className="absolute -left-10 top-24 h-64 w-64 rounded-full border border-brand/10" />
+        <div className="absolute left-0 top-1/3 h-px w-40 -rotate-12 bg-gradient-to-r from-transparent via-brand/30 to-transparent" />
+        <div className="absolute bottom-1/4 right-0 h-px w-40 rotate-12 bg-gradient-to-r from-transparent via-brand/25 to-transparent" />
       </div>
 
       <div className="relative w-full max-w-[430px]">

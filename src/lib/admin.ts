@@ -31,9 +31,20 @@ export function jenisAdmin(p: Pick<Profile, "nama_lengkap" | "team">): JenisAdmi
   return "cs";
 }
 
-/** Nama tampilan tanpa suffix "cs" (permintaan client). */
+/**
+ * Nama dasar tanpa suffix "sosmed" agar tidak dobel saat ditampilkan.
+ * Suffix "CS" DIPERTAHANKAN — client minta nama tampil "Naim CS", "Widya CS", dst.
+ */
 export function namaTampil(p: Pick<Profile, "nama_lengkap">): string {
-  return p.nama_lengkap.replace(/\s+cs$/i, "").trim();
+  return (p.nama_lengkap ?? "").replace(/\s+sosmed$/i, "").trim();
+}
+
+/** Nama lengkap untuk daftar admin: "Rania" → "Rania sosmed". */
+export function namaLengkapAdmin(
+  p: Pick<Profile, "nama_lengkap" | "team">
+): string {
+  const dasar = namaTampil(p);
+  return jenisAdmin(p) === "sosmed" ? `${dasar} sosmed` : dasar;
 }
 
 /** Jabatan yang ditulis di bawah nama admin. */

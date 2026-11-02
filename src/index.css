@@ -8,21 +8,21 @@
   --font-display: "Outfit", -apple-system, BlinkMacSystemFont, sans-serif;
   --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
 
-  /* Latar & teks */
-  --color-bg-main: #05130f;
-  --color-surface: #0a211a;
-  --color-surface-2: #0e2b22;
-  --color-surface-3: #123528;
-  --color-line: #1c4034;
-  --color-line-soft: #153026;
+  /* Latar & teks — hijau zamrud seperti mockup (bukan hitam) */
+  --color-bg-main: #021f1a;
+  --color-surface: #063028;
+  --color-surface-2: #093a30;
+  --color-surface-3: #0d473a;
+  --color-line: #155446;
+  --color-line-soft: #0d4034;
 
   --color-text-main: #f4efe2;
-  --color-text-secondary: #c6d4ca;
-  --color-text-muted: #8ba79a;
+  --color-text-secondary: #cfe0d5;
+  --color-text-muted: #93b5a6;
 
   /* Hijau struktur (sidebar / hero) */
-  --color-navy: #07231c;
-  --color-navy-light: #0d352a;
+  --color-navy: #032a23;
+  --color-navy-light: #0a3d31;
 
   /* Emas = aksen utama */
   --color-brand: #d9b45f;
@@ -64,24 +64,25 @@ h4 {
 .app-canvas {
   background-color: var(--color-bg-main);
   background-image:
-    radial-gradient(1200px 600px at 15% -10%, rgba(24, 90, 70, 0.35), transparent 60%),
-    radial-gradient(900px 500px at 95% 10%, rgba(217, 180, 95, 0.07), transparent 60%);
+    radial-gradient(1100px 560px at 12% -12%, rgba(28, 108, 84, 0.42), transparent 62%),
+    radial-gradient(900px 520px at 96% 6%, rgba(217, 180, 95, 0.08), transparent 62%),
+    linear-gradient(180deg, #052a22 0%, #021f1a 42%, #031a16 100%);
 }
 
 /* Kartu premium: hijau bertingkat + garis emas tipis */
 .card-premium {
-  background-image: linear-gradient(160deg, #0d2b22 0%, #0a211a 55%, #081a15 100%);
+  background-image: linear-gradient(158deg, #0b3a2f 0%, #073129 52%, #052a23 100%);
   border: 1px solid var(--color-line);
   box-shadow:
     0 18px 40px -24px rgba(0, 0, 0, 0.8),
-    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .hero-premium {
   background-image:
-    radial-gradient(600px 220px at 82% 18%, rgba(217, 180, 95, 0.18), transparent 62%),
-    linear-gradient(120deg, #10402f 0%, #0a2a22 48%, #071c17 100%);
-  border: 1px solid rgba(217, 180, 95, 0.22);
+    radial-gradient(600px 220px at 82% 18%, rgba(217, 180, 95, 0.2), transparent 62%),
+    linear-gradient(120deg, #0f4a38 0%, #093a2e 48%, #052a22 100%);
+  border: 1px solid rgba(217, 180, 95, 0.26);
   box-shadow: 0 22px 50px -30px rgba(0, 0, 0, 0.9);
 }
 
