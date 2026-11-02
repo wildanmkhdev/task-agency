@@ -73,28 +73,32 @@ export function DetailRekapPage() {
     enabled: Boolean(adminId),
   });
 
+  const sosmed = admin ? jenisAdmin(admin) === "sosmed" : false;
+
   const { data: rows, isLoading } = useQuery({
-    queryKey: ["rekap-admin", adminId, tanggal],
+    queryKey: ["rekap-admin", adminId, tanggal, sosmed],
     queryFn: async (): Promise<Pesanan[]> => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("pesanan")
         .select(
           "id, harga, status, status_bayar, tanggal, dibuat_oleh, jumlah_keterangan, penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama)"
         )
-        .eq("dibuat_oleh", adminId)
         .gte("tanggal", new Date(`${tanggal}T00:00:00`).toISOString())
-        .lte("tanggal", new Date(`${tanggal}T23:59:59.999`).toISOString())
-        .order("tanggal", { ascending: true });
+        .lte("tanggal", new Date(`${tanggal}T23:59:59.999`).toISOString());
+      // Admin CS/utama: pendapatan milik sendiri. Admin sosmed: total pendapatan
+      // seluruh tim, karena fee 7% dihitung dari pendapatan agency.
+      if (!sosmed) q = q.eq("dibuat_oleh", adminId);
+      const { data, error } = await q.order("tanggal", { ascending: true });
       if (error) throw error;
       return (data ?? []) as unknown as Pesanan[];
     },
-    enabled: Boolean(adminId),
+    // Tunggu data admin agar tahu apakah ini ruangan sosmed.
+    enabled: Boolean(adminId) && Boolean(admin),
   });
 
   const rekap = (rows ?? []).filter(masukRekap);
   const totalPendapatan = rekap.reduce((s, p) => s + p.harga, 0);
   const fee = alokasiFee(totalPendapatan);
-  const sosmed = admin ? jenisAdmin(admin) === "sosmed" : false;
 
   const rincian: RincianRow[] = useMemo(
     () =>

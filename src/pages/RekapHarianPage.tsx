@@ -6,7 +6,7 @@ import { useScope } from "../hooks/useScope";
 import { useAuth } from "../context/AuthContext";
 import { rupiah, tanggalPanjang, yyyyMmDd } from "../lib/format";
 import { masukRekap, type Pesanan, type Profile } from "../lib/types";
-import { namaLengkapAdmin, urutkanAdmin } from "../lib/admin";
+import { jenisAdmin, namaLengkapAdmin, urutkanAdmin } from "../lib/admin";
 import { Card, EmptyState, Spinner } from "../components/ui";
 
 const PESANAN_SELECT =
@@ -94,8 +94,17 @@ export function RekapHarianPage() {
   const rekapHariIni = (rowsHariIni ?? []).filter(masukRekap);
   const rekapKemarin = (rowsKemarin ?? []).filter(masukRekap);
 
-  const totalPendapatan = rekapHariIni.reduce((s, p) => s + p.harga, 0);
-  const totalPendapatanKemarin = rekapKemarin.reduce((s, p) => s + p.harga, 0);
+  // Owner & admin sosmed melihat total agency; admin CS melihat miliknya sendiri.
+  const lihatSemua =
+    isOwner || (profile ? jenisAdmin(profile) === "sosmed" : false);
+  const dalamScope = (rows: Pesanan[]) =>
+    lihatSemua ? rows : rows.filter((p) => p.dibuat_oleh === profile?.id);
+
+  const rekapScope = dalamScope(rekapHariIni);
+  const rekapScopeKemarin = dalamScope(rekapKemarin);
+
+  const totalPendapatan = rekapScope.reduce((s, p) => s + p.harga, 0);
+  const totalPendapatanKemarin = rekapScopeKemarin.reduce((s, p) => s + p.harga, 0);
 
   const daftarAdmin = useMemo(() => {
     const base = urutkanAdmin(admins ?? []);
@@ -188,10 +197,10 @@ export function RekapHarianPage() {
             </p>
           </div>
           <p className="mt-3 font-display text-xl font-extrabold text-text-main tabular sm:text-2xl">
-            {rekapHariIni.length}
+            {rekapScope.length}
           </p>
           <div className="mt-1">
-            <Trend value={persenPerubahan(rekapHariIni.length, rekapKemarin.length)} />
+            <Trend value={persenPerubahan(rekapScope.length, rekapScopeKemarin.length)} />
           </div>
         </div>
       </div>
