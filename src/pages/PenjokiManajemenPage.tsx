@@ -143,6 +143,17 @@ export function PenjokiManajemenPage() {
 
   const semuaPenjoki = penjoki ?? [];
 
+  // Filter list
+  const list = useMemo(() => {
+    return semuaPenjoki.filter((p) => {
+      if (teamFilter && p.team_id !== teamFilter) return false;
+      if (cari && !p.nama.toLowerCase().includes(cari.toLowerCase())) return false;
+      if (statusFilter === "aktif" && !p.aktif) return false;
+      if (statusFilter === "nonaktif" && p.aktif) return false;
+      return true;
+    });
+  }, [semuaPenjoki, teamFilter, cari, statusFilter]);
+
   // ---- Turunan ----
   const kategoriList = useMemo(() => {
     const m = new Map<string, number>();
@@ -152,13 +163,14 @@ export function PenjokiManajemenPage() {
   }, [semuaPenjoki]);
 
   const stats = useMemo(() => {
-    const aktif = semuaPenjoki.filter((p) => p.aktif).length;
+    const aktif = list.filter((p) => p.aktif).length;
     return {
+      total: list.length,
       aktif,
-      nonaktif: semuaPenjoki.length - aktif,
+      nonaktif: list.length - aktif,
       jenis: kategoriList.length,
     };
-  }, [semuaPenjoki, kategoriList]);
+  }, [list, kategoriList]);
 
   const editing = semuaPenjoki.find((p) => p.id === editingId) ?? null;
 
@@ -166,13 +178,6 @@ export function PenjokiManajemenPage() {
   const daftarAdmin = useMemo(() => {
     return urutkanAdmin(admins ?? []);
   }, [admins]);
-
-  const list = semuaPenjoki.filter((p) => {
-    if (cari && !p.nama.toLowerCase().includes(cari.toLowerCase())) return false;
-    if (statusFilter === "aktif" && !p.aktif) return false;
-    if (statusFilter === "nonaktif" && p.aktif) return false;
-    return true;
-  });
 
   // ---- Mutasi ----
   const invalidate = () => {
@@ -419,7 +424,7 @@ export function PenjokiManajemenPage() {
                 Total Penjoki
               </p>
               <p className="mt-1.5 font-display text-xl font-extrabold text-text-main tabular">
-                {semuaPenjoki.length}
+                {stats.total}
               </p>
             </div>
             <div className="card-premium rounded-2xl border-emerald-400/25 px-3 py-3.5 text-center sm:text-left">
@@ -645,7 +650,11 @@ export function PenjokiManajemenPage() {
 
           {/* Tabel penjoki (desktop) */}
           <Card className="hidden overflow-hidden sm:block">
-            {list.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center p-12">
+                <Spinner />
+              </div>
+            ) : list.length === 0 ? (
               <EmptyState
                 title="Tidak ada penjoki"
                 hint="Ubah filter, atau tambah penjoki baru."
@@ -741,7 +750,13 @@ export function PenjokiManajemenPage() {
 
           {/* Daftar penjoki (mobile) — mengikuti mockup */}
           <div className="space-y-2 pb-16 sm:hidden">
-            {list.length === 0 ? (
+            {isLoading ? (
+              <Card>
+                <div className="flex items-center justify-center p-12">
+                  <Spinner />
+                </div>
+              </Card>
+            ) : list.length === 0 ? (
               <Card>
                 <EmptyState
                   title="Tidak ada penjoki"
