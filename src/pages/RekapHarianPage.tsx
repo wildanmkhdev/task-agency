@@ -7,6 +7,8 @@ import { rupiah, yyyyMmDd } from "../lib/format";
 import { masukRekap, type Pesanan, type Profile } from "../lib/types";
 import {
   jenisAdmin,
+  keteranganJabatan,
+  labelJabatan,
   namaLengkapAdmin,
   urutkanAdmin,
 } from "../lib/admin";
@@ -271,7 +273,21 @@ export function RekapHarianPage() {
                     {nama.slice(0, 2).toUpperCase()}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-text-main">{nama}</p>
+                    <p className="text-sm font-extrabold text-text-main">{nama}</p>
+                    <p className="text-[11px] font-semibold text-gold/90">
+                      {labelJabatan(admin)}
+                    </p>
+                    <p className="mt-0.5 line-clamp-1 text-[11px] text-text-muted">
+                      {keteranganJabatan(admin)}
+                    </p>
+                    {admin.no_hp && (
+                      <p className="mt-0.5 text-[11px] text-text-muted">{admin.no_hp}</p>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-extrabold text-gold-soft tabular">
+                      {rupiah(pendapatan)}
+                    </p>
                     <p className="text-[11px] text-text-muted">
                       {jumlah} Transaksi
                       {gabungan && (
@@ -281,9 +297,6 @@ export function RekapHarianPage() {
                       )}
                     </p>
                   </div>
-                  <span className="shrink-0 text-sm font-extrabold text-gold-soft tabular">
-                    {rupiah(pendapatan)}
-                  </span>
                   <svg
                     viewBox="0 0 24 24"
                     className="h-4 w-4 shrink-0 text-text-muted transition-colors group-hover:text-gold"
