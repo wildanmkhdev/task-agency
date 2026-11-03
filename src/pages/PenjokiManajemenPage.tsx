@@ -135,7 +135,11 @@ export function PenjokiManajemenPage() {
         .from("profiles")
         .select("id, role, team_id, nama_lengkap, no_hp, aktif, team:teams(nama)")
         .eq("role", "ADMIN");
-      if (error) throw error;
+      if (error) {
+        console.error("Query admins error:", error);
+        throw error;
+      }
+      console.log("admins data:", data);
       return (data ?? []) as unknown as Profile[];
     },
   });
