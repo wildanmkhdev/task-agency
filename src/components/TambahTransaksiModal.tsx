@@ -1,25 +1,16 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
-import { kodeTransaksi, rupiah, yyyyMmDd } from "../lib/format";
+import { kodeTransaksi, rupiah } from "../lib/format";
 import { hitungFee } from "../lib/fee";
-import type {
-  Customer,
-  JenisTugas,
-  Penjoki,
-  PesananStatus,
-  Profile,
-  StatusBayar,
-} from "../lib/types";
+import type { JenisTugas, Penjoki, Profile } from "../lib/types";
 import { Button, Field, inputCls } from "./ui";
 
 /**
  * Dialog "Tambah Transaksi" — revisi client 3 Nov 2026:
- * "disamping tulisan rincian transaksi tambahkan fitur tambah transaksi,
- *  nanti itu ditulis custom sama adminnya."
- *
- * Hanya tersedia untuk pemilik ruangan (admin yang login) dan tidak untuk
- * admin sosmed (read-only). Fee dihitung otomatis 50/23/7/20.
+ * Simplified: cuma input Tanggal, Penjoki, Jenis Tugas (+ Custom), Nominal.
+ * Status otomatis SELESAI + LUNAS (customer udah payment).
+ * Fee dihitung otomatis 50/23/7/20.
  */
 export function TambahTransaksiModal({
   open,
@@ -37,21 +28,18 @@ export function TambahTransaksiModal({
   const [tanggal, setTanggal] = useState(tanggalAcuan);
   const [penjokiId, setPenjokiId] = useState("");
   const [jenisId, setJenisId] = useState("");
-  const [harga, setHarga] = useState("");
-  const [jumlah, setJumlah] = useState("1 tugas");
-  const [catatan, setCatatan] = useState("");
-  const [status, setStatus] = useState<PesananStatus>("SELESAI");
-  const [statusBayar, setStatusBayar] = useState<StatusBayar>("LUNAS");
-  const [customerMode, setCustomerMode] = useState<"pilih" | "baru">("pilih");
-  const [customerId, setCustomerId] = useState("");
-  const [custNama, setCustNama] = useState("");
-  const [custWa, setCustWa] = useState("");
+  const [jenisCustom, setJenisCustom] = useState("");
+  const [nominal, setNominal] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Sinkronkan tanggal acuan saat dialog dibuka.
+  // Reset form saat dialog dibuka
   useEffect(() => {
     if (open) {
       setTanggal(tanggalAcuan);
+      setPenjokiId("");
+      setJenisId("");
+      setJenisCustom("");
+      setNominal("");
       setError(null);
     }
   }, [open, tanggalAcuan]);
@@ -87,93 +75,52 @@ export function TambahTransaksiModal({
     enabled: open,
   });
 
-  const { data: customerList, isSuccess: customerLoaded } = useQuery({
-    queryKey: ["customer-tambah-transaksi", teamId],
-    queryFn: async (): Promise<Customer[]> => {
-      const { data, error } = await supabase
-        .from("customers")
-        .select("*")
-        .eq("team_id", teamId)
-        .order("nama")
-        .limit(100);
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: open && Boolean(teamId),
-  });
-
-  useEffect(() => {
-    if (open && customerLoaded && (customerList?.length ?? 0) === 0) {
-      setCustomerMode("baru");
-    }
-  }, [open, customerLoaded, customerList]);
-
-  const reset = () => {
-    setPenjokiId("");
-    setJenisId("");
-    setHarga("");
-    setJumlah("1 tugas");
-    setCatatan("");
-    setStatus("SELESAI");
-    setStatusBayar("LUNAS");
-    setCustomerMode("pilih");
-    setCustomerId("");
-    setCustNama("");
-    setCustWa("");
-    setError(null);
-  };
-
   const simpan = useMutation({
     mutationFn: async () => {
       if (!teamId) throw new Error("Akun ini belum terhubung ke tim.");
       if (!penjokiId) throw new Error("Penjoki wajib dipilih.");
-      if (!jenisId) throw new Error("Jenis tugas wajib dipilih.");
-      const nominal = Number(harga);
-      if (!Number.isFinite(nominal) || nominal <= 0)
+      
+      // Validasi jenis tugas: pilih dari list atau custom
+      let finalJenisId = jenisId;
+      if (jenisId === "custom") {
+        if (!jenisCustom.trim()) throw new Error("Jenis tugas custom wajib diisi.");
+        // Buat jenis tugas baru on-the-fly
+        const { data: newJenis, error: jenisErr } = await supabase
+          .from("jenis_tugas")
+          .insert({ nama: jenisCustom.trim(), aktif: true })
+          .select("id")
+          .single();
+        if (jenisErr) throw jenisErr;
+        finalJenisId = newJenis.id;
+      } else if (!jenisId) {
+        throw new Error("Jenis tugas wajib dipilih.");
+      }
+
+      const nominalNum = Number(nominal);
+      if (!Number.isFinite(nominalNum) || nominalNum <= 0)
         throw new Error("Nominal tidak valid.");
-      if (!jumlah.trim()) throw new Error("Keterangan wajib diisi.");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal))
         throw new Error("Tanggal tidak valid.");
 
-      // Customer: pilih yang ada, atau buat baru (kolom customer_id NOT NULL).
-      let custId = customerId;
-      if (customerMode === "baru") {
-        if (!custNama.trim() || !custWa.trim())
-          throw new Error("Nama & WhatsApp customer wajib diisi.");
-        const { data: cust, error: custErr } = await supabase
-          .from("customers")
-          .insert({
-            nama: custNama.trim(),
-            no_wa: custWa.trim(),
-            team_id: teamId,
-          })
-          .select("id")
-          .single();
-        if (custErr) throw custErr;
-        custId = cust.id;
-      } else if (!custId) {
-        throw new Error("Customer wajib dipilih.");
-      }
-
-      const fee = hitungFee(nominal);
+      const fee = hitungFee(nominalNum);
       const tanggalIso = new Date(`${tanggal}T00:00:00`).toISOString();
 
       const { error } = await supabase.from("pesanan").insert({
         kode: kodeTransaksi(),
         team_id: teamId,
-        customer_id: custId,
-        jenis_tugas_id: jenisId,
+        customer_id: null, // Customer ga perlu
+        jenis_tugas_id: finalJenisId,
         penjoki_id: penjokiId,
-        harga: nominal,
+        harga: nominalNum,
         fee_admin: fee.feeAdmin,
         fee_owner: fee.feeOwner,
         fee_penjoki: fee.feePenjoki,
-        jumlah_keterangan: jumlah.trim(),
-        catatan: catatan.trim() || null,
+        jumlah_keterangan: "1 tugas",
+        catatan: null,
         tanggal: tanggalIso,
-        status,
-        status_bayar: statusBayar,
-        ...(status === "SELESAI" ? { selesai_at: new Date().toISOString() } : {}),
+        status: "SELESAI", // Auto SELESAI
+        status_bayar: "LUNAS", // Auto LUNAS (customer udah bayar)
+        selesai_at: new Date().toISOString(),
         dibuat_oleh: admin.id,
       });
       if (error) throw error;
@@ -181,22 +128,18 @@ export function TambahTransaksiModal({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["rekap"] });
       qc.invalidateQueries({ queryKey: ["rekap-admin"] });
+      qc.invalidateQueries({ queryKey: ["rekap-admin-pembanding"] });
       qc.invalidateQueries({ queryKey: ["pesanan"] });
       qc.invalidateQueries({ queryKey: ["dashboard-pesanan"] });
       qc.invalidateQueries({ queryKey: ["penjoki-rate"] });
       qc.invalidateQueries({ queryKey: ["penjoki-tugas-bulan-ini"] });
-      qc.invalidateQueries({ queryKey: ["customer-form"] });
-      qc.invalidateQueries({ queryKey: ["customer-tambah-transaksi"] });
-      reset();
+      qc.invalidateQueries({ queryKey: ["jenis-tugas"] });
       onClose();
     },
     onError: (e) => setError((e as Error).message),
   });
 
   if (!open) return null;
-
-  const nominalNum = Number(harga);
-  const fee = nominalNum > 0 ? hitungFee(nominalNum) : null;
 
   return (
     <div
@@ -237,39 +180,27 @@ export function TambahTransaksiModal({
           }}
           className="space-y-3.5"
         >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Tanggal">
-              <input
-                type="date"
-                value={yyyyMmDd(new Date(tanggal))}
-                onChange={(e) => setTanggal(e.target.value)}
-                className={`${inputCls} [color-scheme:dark]`}
-              />
-            </Field>
-            <Field label="Nominal (Rp)">
-              <input
-                type="number"
-                min={0}
-                inputMode="numeric"
-                placeholder="200000"
-                value={harga}
-                onChange={(e) => setHarga(e.target.value)}
-                className={inputCls}
-              />
-            </Field>
-          </div>
+          <Field label="Tanggal">
+            <input
+              type="date"
+              value={tanggal}
+              onChange={(e) => setTanggal(e.target.value)}
+              className={`${inputCls} [color-scheme:dark]`}
+              required
+            />
+          </Field>
 
           <Field label="Penjoki">
             <select
               value={penjokiId}
               onChange={(e) => setPenjokiId(e.target.value)}
               className={inputCls}
+              required
             >
               <option value="">— Pilih penjoki —</option>
               {(penjokiList ?? []).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.nama}
-                  {p.no_hp ? ` — ${p.no_hp}` : ""}
                 </option>
               ))}
             </select>
@@ -278,8 +209,12 @@ export function TambahTransaksiModal({
           <Field label="Jenis Tugas">
             <select
               value={jenisId}
-              onChange={(e) => setJenisId(e.target.value)}
+              onChange={(e) => {
+                setJenisId(e.target.value);
+                if (e.target.value !== "custom") setJenisCustom("");
+              }}
               className={inputCls}
+              required
             >
               <option value="">— Pilih jenis —</option>
               {(jenisList ?? []).map((j) => (
@@ -287,145 +222,93 @@ export function TambahTransaksiModal({
                   {j.nama}
                 </option>
               ))}
+              <option value="custom">Custom (tulis manual)</option>
             </select>
           </Field>
 
-          {/* Customer */}
-          <div className="rounded-xl border border-line bg-surface-2 p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
-                Customer
-              </p>
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setCustomerMode("pilih")}
-                  className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${
-                    customerMode === "pilih"
-                      ? "border-brand bg-brand text-[#10231a]"
-                      : "border-line bg-surface-2 text-text-secondary"
-                  }`}
-                >
-                  Lama
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCustomerMode("baru")}
-                  className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${
-                    customerMode === "baru"
-                      ? "border-brand bg-brand text-[#10231a]"
-                      : "border-line bg-surface-2 text-text-secondary"
-                  }`}
-                >
-                  Baru
-                </button>
-              </div>
-            </div>
-            {customerMode === "pilih" ? (
-              <select
-                value={customerId}
-                onChange={(e) => setCustomerId(e.target.value)}
+          {jenisId === "custom" && (
+            <Field label="Jenis Tugas Custom">
+              <input
+                type="text"
+                placeholder="Tulis jenis tugas..."
+                value={jenisCustom}
+                onChange={(e) => setJenisCustom(e.target.value)}
                 className={inputCls}
-                disabled={(customerList?.length ?? 0) === 0}
-              >
-                {(customerList?.length ?? 0) === 0 ? (
-                  <option>— Belum ada customer —</option>
-                ) : (
-                  <>
-                    <option value="">— Pilih customer —</option>
-                    {(customerList ?? []).map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nama} ({c.no_wa})
-                      </option>
-                    ))}
-                  </>
-                )}
-              </select>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2">
-                <input
-                  placeholder="Nama customer"
-                  value={custNama}
-                  onChange={(e) => setCustNama(e.target.value)}
-                  className={inputCls}
-                />
-                <input
-                  placeholder="No. WhatsApp"
-                  value={custWa}
-                  onChange={(e) => setCustWa(e.target.value)}
-                  className={inputCls}
-                />
-              </div>
-            )}
-          </div>
+                required
+              />
+            </Field>
+          )}
 
-          <Field label="Keterangan">
+          <Field label="Nominal (Rp)">
             <input
-              placeholder="Contoh: 1 laporan PKL"
-              value={jumlah}
-              onChange={(e) => setJumlah(e.target.value)}
+              type="number"
+              min={1}
+              step="1"
+              inputMode="numeric"
+              placeholder="200000"
+              value={nominal}
+              onChange={(e) => setNominal(e.target.value)}
               className={inputCls}
+              required
             />
           </Field>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Status Tugas">
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as PesananStatus)}
-                className={inputCls}
-              >
-                <option value="SELESAI">Selesai</option>
-                <option value="DIKERJAKAN">Dikerjakan</option>
-                <option value="MENUNGU">Menunggu</option>
-                <option value="BATAL">Batal</option>
-              </select>
-            </Field>
-            <Field label="Status Bayar">
-              <select
-                value={statusBayar}
-                onChange={(e) => setStatusBayar(e.target.value as StatusBayar)}
-                className={inputCls}
-              >
-                <option value="LUNAS">Lunas</option>
-                <option value="CICIL">Cicil</option>
-                <option value="BELUM">Belum Bayar</option>
-              </select>
-            </Field>
-          </div>
-
-          <input
-            placeholder="Catatan (opsional)"
-            value={catatan}
-            onChange={(e) => setCatatan(e.target.value)}
-            className={inputCls}
-          />
-
-          {fee && (
-            <div className="rounded-xl border border-brand-border bg-brand/10 px-3.5 py-2.5 text-[11px] tabular">
-              <p className="mb-1 font-bold uppercase tracking-wide text-gold">
-                Fee otomatis
+          {/* Preview Fee */}
+          {Number(nominal) > 0 && (
+            <div className="rounded-xl border border-line bg-surface-2 p-3">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                Rincian Fee
               </p>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-text-secondary">
-                <span>Penjoki 50%: <strong className="text-text-main">{rupiah(fee.feePenjoki)}</strong></span>
-                <span>Admin CS 23%: <strong className="text-text-main">{rupiah(fee.feeAdmin)}</strong></span>
-                <span>Sosmed 7%: <strong className="text-text-main">{rupiah(fee.feeSosmed)}</strong></span>
-                <span>Owner 20%: <strong className="text-text-main">{rupiah(fee.feeOwner)}</strong></span>
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">Penjoki (50%)</span>
+                  <span className="font-bold text-text-main tabular">
+                    {rupiah(hitungFee(Number(nominal)).feePenjoki)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">Admin CS (23%)</span>
+                  <span className="font-bold text-text-main tabular">
+                    {rupiah(hitungFee(Number(nominal)).feeAdmin)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">Admin Sosmed (7%)</span>
+                  <span className="font-bold text-text-main tabular">
+                    {rupiah(hitungFee(Number(nominal)).feeSosmed)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">Owner (20%)</span>
+                  <span className="font-bold text-text-main tabular">
+                    {rupiah(hitungFee(Number(nominal)).feeOwner)}
+                  </span>
+                </div>
               </div>
             </div>
           )}
 
           {error && (
-            <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-3.5 py-2.5 text-xs font-semibold text-danger">
+            <div className="rounded-xl border border-red-400/30 bg-red-400/10 px-3.5 py-3 text-[12px] font-semibold text-danger">
               {error}
-            </p>
+            </div>
           )}
 
           <div className="flex gap-2 pt-1">
-            <Button variant="ghost" onClick={onClose} className="flex-1">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onClose}
+              className="flex-1"
+            >
               Batal
             </Button>
-            <Button type="submit" variant="primary" disabled={simpan.isPending} className="flex-1">
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={simpan.isPending}
+              className="flex-1"
+            >
               {simpan.isPending ? "Menyimpan…" : "Simpan"}
             </Button>
           </div>
