@@ -174,10 +174,12 @@ export function PenjokiManajemenPage() {
   }, [list, kategoriList]);
 
   const editing = semuaPenjoki.find((p) => p.id === editingId) ?? null;
-
-  // Semua authenticated user bisa melihat semua admin (sesuai RLS policy)
   const daftarAdmin = useMemo(() => {
-    return urutkanAdmin(admins ?? []);
+    const filtered = (admins ?? []).filter(a => {
+      const teamName = a.team?.nama?.toLowerCase() ?? '';
+      return !teamName.includes('tim 1') && !teamName.includes('sosmed');
+    });
+    return urutkanAdmin(filtered);
   }, [admins]);
 
   /** Check apakah user boleh edit penjoki ini */
