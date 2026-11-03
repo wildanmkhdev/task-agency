@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
-import { useScope } from "../hooks/useScope";
 import { useAuth } from "../context/AuthContext";
 import { rupiah, yyyyMmDd } from "../lib/format";
 import { masukRekap, type Pesanan, type Profile } from "../lib/types";
@@ -50,12 +49,12 @@ function Trend({ value, periode }: { value: number | null; periode: Periode }) {
 /**
  * Data Rekap Tim — revisi client 3 Nov 2026:
  * - Periode Harian / Mingguan / Bulanan.
- * - Admin CS & Admin Utama: hanya melihat miliknya sendiri.
- * - Admin Sosmed: melihat seluruh admin (read-only) + total pendapatan agency.
- * - Owner: seluruh admin & seluruh tim.
+ * - Semua admin: bisa melihat rekap admin lain (read-only).
+ * - Tombol "Tambah Transaksi" hanya muncul di ruangan sendiri.
+ * - Admin Sosmed: read-only semua, tidak bisa tambah transaksi.
+ * - Owner: lihat semua & input pesanan lewat menu "Input Fee".
  */
 export function RekapHarianPage() {
-  const { isOwner } = useScope();
   const { profile } = useAuth();
   const navigate = useNavigate();
   const [periode, setPeriode] = useState<Periode>("harian");
@@ -106,8 +105,8 @@ export function RekapHarianPage() {
   const rekap = (rowsPeriode ?? []).filter(masukRekap);
   const rekapSebelumnya = (rowsSebelumnya ?? []).filter(masukRekap);
 
-  // Owner & sosmed melihat total agency; admin CS/utama hanya miliknya.
-  const lihatSemua = isOwner || sosmed;
+  // Semua admin lihat total pendapatan semua transaksi (sama seperti owner/sosmed).
+  const lihatSemua = true;
   const dalamScope = (rows: Pesanan[]) =>
     lihatSemua ? rows : rows.filter((p) => p.dibuat_oleh === profile?.id);
 
@@ -119,8 +118,8 @@ export function RekapHarianPage() {
 
   const daftarAdmin = useMemo(() => {
     const base = urutkanAdmin(admins ?? []);
-    // Admin CS/utama hanya melihat dirinya sendiri; owner & sosmed melihat semua.
-    const terlihat = lihatSemua ? base : base.filter((a) => a.id === profile?.id);
+    // Semua admin melihat daftar semua admin (read-only untuk yang bukan miliknya).
+    const terlihat = base;
     return terlihat.map((a) => {
       /**
        * Baris milik admin sosmed = akumulasi SEMUA tim (permintaan client),
@@ -135,7 +134,7 @@ export function RekapHarianPage() {
         gabungan,
       };
     });
-  }, [admins, lihatSemua, sosmed, profile?.id, rekap]);
+  }, [admins, sosmed, profile?.id, rekap]);
 
   if (isLoading) return <Spinner label="Memuat rekap…" />;
 
