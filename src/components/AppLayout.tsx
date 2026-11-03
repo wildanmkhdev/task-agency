@@ -15,7 +15,6 @@ import {
   ClipboardIcon,
   Cog6ToothIcon,
   HomeIcon,
-  LockClosedIcon,
   PlusCircleIcon,
   UserCircleIcon,
   UsersIcon,
@@ -49,13 +48,6 @@ export const MENU_UTAMA: MenuItem[] = [
     label: "Jadwal Setor Mingguan",
     desc: "Jadwal dan pencatatan setoran mingguan.",
     icon: CalendarIcon,
-  },
-  {
-    to: "/domain-owner",
-    label: "Domain Owner",
-    desc: "Menu khusus owner dengan akses terbatas.",
-    icon: LockClosedIcon,
-    ownerOnly: true,
   },
   {
     to: "/pengaturan",

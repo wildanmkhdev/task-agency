@@ -14,7 +14,6 @@ import { PenjokiPage } from "./pages/PenjokiPage";
 import { PenjokiManajemenPage } from "./pages/PenjokiManajemenPage";
 import { PengaturanPage } from "./pages/PengaturanPage";
 import { JadwalSetorPage } from "./pages/JadwalSetorPage";
-import { DomainOwnerPage } from "./pages/DomainOwnerPage";
 import { NotifikasiPage } from "./pages/NotifikasiPage";
 
 /** Guard: wajib login. Scoping owner/admin ditegakkan RLS di database (D1). */
@@ -58,7 +57,6 @@ export const router = createBrowserRouter([
       { path: "/penjoki", element: <PenjokiPage /> },
       { path: "/penjoki/manajemen", element: <PenjokiManajemenPage /> },
       { path: "/jadwal", element: <JadwalSetorPage /> },
-      { path: "/domain-owner", element: <DomainOwnerPage /> },
       { path: "/notifikasi", element: <NotifikasiPage /> },
       { path: "/pengaturan", element: <PengaturanPage /> },
       { path: "*", element: <Navigate to="/" replace /> },
