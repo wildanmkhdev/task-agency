@@ -93,12 +93,16 @@ export function RekapHarianPage() {
   });
 
   const { data: admins } = useQuery({
-    queryKey: ["admins"],
+    queryKey: ["admins", profile?.team_id],
     queryFn: async (): Promise<Profile[]> => {
-      const { data, error } = await supabase
+      const query = supabase
         .from("profiles")
         .select("id, role, team_id, nama_lengkap, no_hp, aktif, team:teams(nama)")
         .eq("role", "ADMIN");
+      // Admin CS/Utama: filter timnya sendiri; Owner/Sosmed: semua tim
+      const isAdminCS = profile && jenisAdmin(profile) === "cs";
+      const scopedQuery = isAdminCS ? query.eq("team_id", profile.team_id) : query;
+      const { data, error } = await scopedQuery;
       if (error) throw error;
       return (data ?? []) as unknown as Profile[];
     },
