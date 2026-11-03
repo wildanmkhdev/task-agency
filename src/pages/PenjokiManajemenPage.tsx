@@ -11,7 +11,6 @@ import {
   labelJabatan,
   namaLengkapAdmin,
   urutkanAdmin,
-  hanyaBaca,
 } from "../lib/admin";
 import {
   Button,
@@ -45,8 +44,8 @@ type Tab = "penjoki" | "admin";
 export function PenjokiManajemenPage() {
   const { profile, isOwner, teams, teamFilter, setTeamFilter, scopedTeamId, applyScope } =
     useScope();
-  /** Admin sosmed hanya boleh melihat data (revisi 3 Nov 2026). */
-  const readOnly = hanyaBaca(profile);
+  /** Penjoki CRUD khusus owner, semua admin read-only (revisi 3 Nov 2026). */
+  const readOnly = !isOwner;
   const qc = useQueryClient();
   const formRef = useRef<HTMLDivElement>(null);
 
