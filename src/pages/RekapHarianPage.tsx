@@ -120,8 +120,8 @@ export function RekapHarianPage() {
 
   const daftarAdmin = useMemo(() => {
     const base = urutkanAdmin(admins ?? []);
-    // Tampilkan semua admin termasuk Dea (Tim Utama)
-    const terlihat = base;
+    // Hide admin utama (Dea) dari list rekap, tapi tetap bisa akses ruangannya via URL
+    const terlihat = base.filter((a) => jenisAdmin(a) !== "utama");
     return terlihat.map((a) => {
       /**
        * Baris milik admin sosmed = akumulasi SEMUA tim (permintaan client),
