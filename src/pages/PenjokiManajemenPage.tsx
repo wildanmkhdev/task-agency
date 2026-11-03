@@ -19,7 +19,6 @@ import {
   Field,
   RateBadge,
   Spinner,
-  TeamTabs,
   inputCls,
 } from "../components/ui";
 import {
@@ -439,15 +438,31 @@ export function PenjokiManajemenPage() {
             </div>
           </div>
 
-          {/* Filter tim lengkap (desktop) */}
-          <div className="hidden sm:block">
-            {isOwner ? (
-              <TeamTabs teams={teams} value={teamFilter} onChange={setTeamFilter} />
-            ) : (
-              <span className="inline-flex w-fit items-center gap-2 rounded-full border border-brand-border bg-brand/10 px-3 py-1 text-[11px] font-bold text-gold">
-                📌 {teams.find((t) => t.id === profile?.team_id)?.nama ?? "Tim saya"}
-              </span>
-            )}
+          {/* Filter tim tabs (horizontal) */}
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setTeamFilter(null)}
+              className={`rounded-full px-4 py-2 text-xs font-bold transition-colors ${
+                !teamFilter
+                  ? "bg-brand text-[#10231a]"
+                  : "border border-line bg-surface-2 text-text-secondary hover:border-brand hover:text-gold"
+              }`}
+            >
+              Semua
+            </button>
+            {teams.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTeamFilter(t.id)}
+                className={`rounded-full px-4 py-2 text-xs font-bold transition-colors ${
+                  teamFilter === t.id
+                    ? "bg-brand text-[#10231a]"
+                    : "border border-line bg-surface-2 text-text-secondary hover:border-brand hover:text-gold"
+                }`}
+              >
+                {t.nama}
+              </button>
+            ))}
           </div>
 
           {/* Form tambah / edit */}
@@ -641,8 +656,6 @@ export function PenjokiManajemenPage() {
                       <th className="px-4 py-3 font-bold">Nama</th>
                       <th className="px-4 py-3 font-bold">Tim</th>
                       <th className="px-4 py-3 font-bold">Rate</th>
-                      <th className="px-4 py-3 font-bold">Keahlian</th>
-                      <th className="px-4 py-3 text-center font-bold">Tugas bulan ini</th>
                       <th className="px-4 py-3 font-bold">Status</th>
                       {!readOnly && <th className="px-4 py-3 text-right font-bold">Aksi</th>}
                     </tr>
@@ -666,40 +679,23 @@ export function PenjokiManajemenPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-xs font-bold text-text-secondary">
-                          {p.team?.nama ?? "-"}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="whitespace-nowrap text-xs font-bold text-text-secondary">
+                              {p.team?.nama ?? "-"}
+                            </span>
+                            <div className="relative h-2 w-20 overflow-hidden rounded-full bg-surface-3">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-brand via-gold-soft to-brand"
+                                style={{
+                                  width: `${rateBulanIni?.get(p.id) ?? 0}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           <RateBadge rate={rateBulanIni?.get(p.id) ?? null} />
-                        </td>
-                        <td className="px-4 py-3">
-                          <div
-                            className="flex flex-wrap items-center gap-1"
-                            title={(p.keahlian ?? []).join(", ")}
-                          >
-                            {(p.keahlian ?? []).length === 0 ? (
-                              <span className="text-xs text-text-muted">—</span>
-                            ) : (
-                              <>
-                                {(p.keahlian ?? []).slice(0, 3).map((k) => (
-                                  <span
-                                    key={k}
-                                    className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-text-secondary"
-                                  >
-                                    {k}
-                                  </span>
-                                ))}
-                                {(p.keahlian ?? []).length > 3 && (
-                                  <span className="rounded-full border border-brand-border bg-brand/10 px-2 py-0.5 text-[11px] font-bold text-gold">
-                                    +{(p.keahlian ?? []).length - 3}
-                                  </span>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-center font-semibold text-text-main tabular">
-                          {tugasBulanIni?.get(p.id) ?? 0}
                         </td>
                         <td className="px-4 py-3">
                           <span
