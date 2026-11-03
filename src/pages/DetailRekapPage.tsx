@@ -218,38 +218,45 @@ export function DetailRekapPage() {
     const doc = new jsPDF();
     const namaAdmin = admin?.nama_lengkap || "Admin";
     const namaTeam = admin?.team?.nama || "";
+    const sekarang = new Date();
+    const tanggalCetak = new Intl.DateTimeFormat("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    }).format(sekarang);
+    const jamCetak = new Intl.DateTimeFormat("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(sekarang);
+
+    // Logo (placeholder - akan diganti dengan logo asli)
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("JOKITUGASA", 105, 20, { align: "center" });
     
-    // Header
-    doc.setFontSize(16);
-    doc.text("LAPORAN KEUANGAN", 105, 15, { align: "center" });
-    doc.setFontSize(11);
-    doc.text(`${namaAdmin}${namaTeam ? ` - ${namaTeam}` : ""}`, 105, 22, { align: "center" });
-    doc.setFontSize(9);
-    doc.text(rentang.label, 105, 28, { align: "center" });
-
-    // Ringkasan
+    // Garis pemisah
+    doc.setLineWidth(0.5);
+    doc.line(14, 25, 196, 25);
+    
+    // Judul
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("LAPORAN KEUANGAN", 105, 35, { align: "center" });
+    
+    // Info periode dan admin
     doc.setFontSize(10);
-    doc.text("RINGKASAN", 14, 38);
-    const ringkasan = [
-      ["Total Transaksi", String(rekap.length)],
-      ["Total Pendapatan", rupiah(totalPendapatan)],
-      ["Fee Penjoki (50%)", rupiah(fee.penjoki)],
-      ["Fee Admin CS (23%)", rupiah(fee.adminCs)],
-      ["Fee Admin Sosmed (7%)", rupiah(fee.adminSosmed)],
-      ["Fee Owner (20%)", rupiah(fee.owner)],
-    ];
-    autoTable(doc, {
-      startY: 42,
-      head: [["Keterangan", "Jumlah"]],
-      body: ringkasan,
-      theme: "striped",
-      styles: { fontSize: 9, halign: "left" },
-      columnStyles: { 1: { halign: "right" } },
-    });
+    doc.setFont("helvetica", "normal");
+    doc.text(`Periode: ${rentang.label}`, 14, 45);
+    doc.text(`Admin: ${namaAdmin}${namaTeam ? ` (${namaTeam})` : ""}`, 14, 51);
+    
+    // Info cetak (kanan atas)
+    doc.setFontSize(8);
+    doc.text(`Dicetak oleh: ${profile?.nama_lengkap || "Admin"}`, 196, 45, { align: "right" });
+    doc.text(`Tanggal: ${tanggalCetak}`, 196, 50, { align: "right" });
+    doc.text(`Jam: ${jamCetak}`, 196, 55, { align: "right" });
 
-    // Rincian Transaksi
-    const finalY = (doc as any).lastAutoTable.finalY || 42;
-    doc.text("RINCIAN TRANSAKSI", 14, finalY + 10);
+    // Tabel Rincian Transaksi
     const body = rincian.map((r, i) => [
       i + 1,
       r.tanggal,
@@ -257,98 +264,167 @@ export function DetailRekapPage() {
       r.jenis,
       rupiah(r.nominal),
     ]);
-    body.push(["", "", "", "TOTAL", rupiah(totalPendapatan)]);
     
     autoTable(doc, {
-      startY: finalY + 14,
+      startY: 62,
       head: [["No", "Tanggal", "Penjoki", "Jenis Tugas", "Nominal"]],
       body,
-      theme: "grid",
-      styles: { fontSize: 8, halign: "left" },
+      theme: "plain",
+      styles: { 
+        fontSize: 9, 
+        cellPadding: 3,
+        lineColor: [0, 0, 0],
+        lineWidth: 0.1,
+      },
+      headStyles: { 
+        fillColor: [255, 255, 255],
+        textColor: [0, 0, 0],
+        fontStyle: "bold",
+        halign: "left",
+      },
       columnStyles: { 
         0: { halign: "center", cellWidth: 10 },
-        4: { halign: "right" },
+        1: { cellWidth: 25 },
+        4: { halign: "right", cellWidth: 30 },
       },
-      headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-      footStyles: { fillColor: [236, 240, 241], textColor: 0, fontStyle: "bold" },
+      didDrawPage: () => {
+        // Border tabel
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.1);
+      },
     });
 
-    doc.save(`Laporan_${namaAdmin}_${tanggal}.pdf`);
+    // Subtotal dan Grand Total
+    const finalY = (doc as any).lastAutoTable.finalY || 62;
+    doc.setLineWidth(0.3);
+    doc.line(14, finalY + 5, 196, finalY + 5);
+    
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("GRAND TOTAL", 140, finalY + 12);
+    doc.text(rupiah(totalPendapatan), 196, finalY + 12, { align: "right" });
+    
+    // Breakdown fee
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    let yPos = finalY + 20;
+    doc.text("Rincian Fee:", 14, yPos);
+    yPos += 5;
+    doc.text(`Fee Penjoki (50%)`, 20, yPos);
+    doc.text(rupiah(fee.penjoki), 70, yPos, { align: "right" });
+    yPos += 4;
+    doc.text(`Fee Admin CS (23%)`, 20, yPos);
+    doc.text(rupiah(fee.adminCs), 70, yPos, { align: "right" });
+    yPos += 4;
+    doc.text(`Fee Admin Sosmed (7%)`, 20, yPos);
+    doc.text(rupiah(fee.adminSosmed), 70, yPos, { align: "right" });
+    yPos += 4;
+    doc.text(`Fee Owner (20%)`, 20, yPos);
+    doc.text(rupiah(fee.owner), 70, yPos, { align: "right" });
+
+    // Footer
+    doc.setFontSize(7);
+    doc.setTextColor(128);
+    doc.text("Laporan ini digenerate otomatis oleh sistem JokiTugasAja", 105, 285, { align: "center" });
+
+    doc.save(`Invoice_${namaAdmin}_${tanggal}.pdf`);
   }
 
   async function exportExcel() {
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet("Laporan");
+    const ws = wb.addWorksheet("Laporan Keuangan");
     const namaAdmin = admin?.nama_lengkap || "Admin";
     const namaTeam = admin?.team?.nama || "";
+    const sekarang = new Date();
+    const tanggalCetak = new Intl.DateTimeFormat("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    }).format(sekarang);
+    const jamCetak = new Intl.DateTimeFormat("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(sekarang);
 
-    // Header
+    // Logo/Header (baris 1-2)
     ws.mergeCells("A1:E1");
-    const titleCell = ws.getCell("A1");
+    const logoCell = ws.getCell("A1");
+    logoCell.value = "JOKITUGASA";
+    logoCell.font = { bold: true, size: 16 };
+    logoCell.alignment = { horizontal: "center", vertical: "middle" };
+    ws.getRow(1).height = 25;
+
+    // Garis pemisah
+    ws.getRow(2).height = 5;
+
+    // Judul (baris 3)
+    ws.mergeCells("A3:E3");
+    const titleCell = ws.getCell("A3");
     titleCell.value = "LAPORAN KEUANGAN";
     titleCell.font = { bold: true, size: 14 };
     titleCell.alignment = { horizontal: "center" };
 
-    ws.mergeCells("A2:E2");
-    ws.getCell("A2").value = `${namaAdmin}${namaTeam ? ` - ${namaTeam}` : ""}`;
-    ws.getCell("A2").alignment = { horizontal: "center" };
+    // Info periode dan admin (baris 5-6)
+    ws.getCell("A5").value = `Periode: ${rentang.label}`;
+    ws.getCell("A6").value = `Admin: ${namaAdmin}${namaTeam ? ` (${namaTeam})` : ""}`;
 
-    ws.mergeCells("A3:E3");
-    ws.getCell("A3").value = rentang.label;
-    ws.getCell("A3").alignment = { horizontal: "center" };
+    // Info cetak (baris 5-7, kolom kanan)
+    ws.getCell("D5").value = `Dicetak oleh: ${profile?.nama_lengkap || "Admin"}`;
+    ws.getCell("D6").value = `Tanggal: ${tanggalCetak}`;
+    ws.getCell("D7").value = `Jam: ${jamCetak}`;
+    ws.getCell("D5").font = { size: 9 };
+    ws.getCell("D6").font = { size: 9 };
+    ws.getCell("D7").font = { size: 9 };
+    ws.getCell("D5").alignment = { horizontal: "right" };
+    ws.getCell("D6").alignment = { horizontal: "right" };
+    ws.getCell("D7").alignment = { horizontal: "right" };
 
-    // Ringkasan
-    ws.getCell("A5").value = "RINGKASAN";
-    ws.getCell("A5").font = { bold: true };
-    
-    const ringkasan = [
-      ["Total Transaksi", rekap.length],
-      ["Total Pendapatan", totalPendapatan],
-      ["Fee Penjoki (50%)", fee.penjoki],
-      ["Fee Admin CS (23%)", fee.adminCs],
-      ["Fee Admin Sosmed (7%)", fee.adminSosmed],
-      ["Fee Owner (20%)", fee.owner],
-    ];
-    
-    ws.addRow(["Keterangan", "Jumlah"]);
-    const headerRow = ws.lastRow;
-    if (headerRow) {
-      headerRow.font = { bold: true };
-      headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD3D3D3" } };
-    }
-    
-    ringkasan.forEach(([ket, jml]) => {
-      ws.addRow([ket, jml]);
-      if (ws.lastRow && typeof jml === "number") {
-        ws.lastRow.getCell(2).numFmt = "#,##0";
-      }
+    // Header tabel (baris 9)
+    const headerRow = ws.addRow(["No", "Tanggal", "Penjoki", "Jenis Tugas", "Nominal"]);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { horizontal: "left", vertical: "middle" };
+    headerRow.border = {
+      top: { style: "thin" },
+      bottom: { style: "thin" },
+    };
+
+    // Data transaksi
+    rincian.forEach((r, i) => {
+      const row = ws.addRow([i + 1, r.tanggal, r.penjoki, r.jenis, r.nominal]);
+      row.getCell(5).numFmt = "#,##0";
+      row.getCell(5).alignment = { horizontal: "right" };
+      row.border = {
+        bottom: { style: "hair" },
+      };
     });
+
+    // Grand Total
+    const totalRow = ws.addRow(["", "", "", "GRAND TOTAL", totalPendapatan]);
+    totalRow.font = { bold: true };
+    totalRow.getCell(5).numFmt = "#,##0";
+    totalRow.getCell(5).alignment = { horizontal: "right" };
+    totalRow.border = {
+      top: { style: "double" },
+      bottom: { style: "double" },
+    };
 
     // Spacing
     ws.addRow([]);
     ws.addRow([]);
 
-    // Rincian Transaksi
-    ws.addRow(["RINCIAN TRANSAKSI"]);
-    ws.lastRow!.font = { bold: true };
-    
-    const detailHeader = ws.addRow(["No", "Tanggal", "Penjoki", "Jenis Tugas", "Nominal"]);
-    detailHeader.font = { bold: true };
-    detailHeader.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2980B9" } };
-    detailHeader.eachCell((cell) => {
-      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
-    });
+    // Breakdown fee
+    ws.addRow(["Rincian Fee:"]).font = { bold: true };
+    ws.addRow(["Fee Penjoki (50%)", "", "", "", fee.penjoki]);
+    ws.addRow(["Fee Admin CS (23%)", "", "", "", fee.adminCs]);
+    ws.addRow(["Fee Admin Sosmed (7%)", "", "", "", fee.adminSosmed]);
+    ws.addRow(["Fee Owner (20%)", "", "", "", fee.owner]);
 
-    rincian.forEach((r, i) => {
-      const row = ws.addRow([i + 1, r.tanggal, r.penjoki, r.jenis, r.nominal]);
-      row.getCell(5).numFmt = "#,##0";
+    // Format breakdown
+    [ws.lastRow!.number - 3, ws.lastRow!.number - 2, ws.lastRow!.number - 1, ws.lastRow!.number].forEach((rowNum) => {
+      ws.getRow(rowNum).getCell(5).numFmt = "#,##0";
+      ws.getRow(rowNum).getCell(5).alignment = { horizontal: "right" };
     });
-
-    // Total
-    const totalRow = ws.addRow(["", "", "", "TOTAL", totalPendapatan]);
-    totalRow.font = { bold: true };
-    totalRow.getCell(5).numFmt = "#,##0";
-    totalRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFECF0F1" } };
 
     // Column widths
     ws.getColumn(1).width = 6;
@@ -362,7 +438,7 @@ export function DetailRekapPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `Laporan_${namaAdmin}_${tanggal}.xlsx`;
+    a.download = `Invoice_${namaAdmin}_${tanggal}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
   }
