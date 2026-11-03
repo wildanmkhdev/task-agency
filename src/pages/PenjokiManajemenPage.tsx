@@ -398,7 +398,7 @@ export function PenjokiManajemenPage() {
                       >
                         Semua Tim
                       </button>
-                      {teams.filter(t => !t.nama.toLowerCase().includes('sosmed')).map((t) => (
+                      {teams.filter(t => !t.nama.toLowerCase().includes('sosmed') && !t.nama.toLowerCase().includes('tim 1')).map((t) => (
                         <button
                           key={t.id}
                           onClick={() => setTeamFilter(t.id)}
@@ -466,7 +466,7 @@ export function PenjokiManajemenPage() {
             >
               Semua
             </button>
-            {teams.filter(t => !t.nama.toLowerCase().includes('sosmed')).map((t) => (
+            {teams.filter(t => !t.nama.toLowerCase().includes('sosmed') && !t.nama.toLowerCase().includes('tim 1')).map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTeamFilter(t.id)}
