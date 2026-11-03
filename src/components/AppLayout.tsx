@@ -69,13 +69,16 @@ const MENU_TULIS = new Set(["/pesanan/baru"]);
 
 /**
  * Menu operasional sesuai hak akses.
- * Admin sosmed bersifat read-only (revisi 3 Nov 2026) → tidak melihat
- * "Input Fee" karena memang tidak boleh menambah transaksi.
+ * "Input Fee" khusus owner only (revisi 3 Nov 2026).
  */
-function menuOperasionalSesuaiAkses(readOnly: boolean): MenuItem[] {
-  return readOnly
-    ? MENU_OPERASIONAL.filter((m) => !MENU_TULIS.has(m.to))
-    : MENU_OPERASIONAL;
+function menuOperasionalSesuaiAkses(readOnly: boolean, isOwner: boolean): MenuItem[] {
+  return MENU_OPERASIONAL.filter((m) => {
+    // Input Fee khusus owner
+    if (m.to === "/pesanan/baru" && !isOwner) return false;
+    // Menu tulis disembunyikan untuk read-only (sosmed)
+    if (readOnly && MENU_TULIS.has(m.to)) return false;
+    return true;
+  });
 }
 
 function Brand({ compact = false }: { compact?: boolean }) {
@@ -140,7 +143,8 @@ function DrawerContent({ onNavigate }: { onNavigate: () => void }) {
   const { profile, signOut } = useAuth();
   const { pathname } = useLocation();
   const readOnly = hanyaBaca(profile);
-  const menuOps = menuOperasionalSesuaiAkses(readOnly);
+  const isOwner = profile?.role === "OWNER";
+  const menuOps = menuOperasionalSesuaiAkses(readOnly, isOwner);
   const activeTo = activePath(pathname, [...MENU_UTAMA, ...menuOps]);
 
   return (
@@ -243,7 +247,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { profile } = useAuth();
   const isOwner = profile?.role === "OWNER";
   const readOnly = hanyaBaca(profile);
-  const menuOps = menuOperasionalSesuaiAkses(readOnly);
+  const menuOps = menuOperasionalSesuaiAkses(readOnly, isOwner);
   const initials = (profile?.nama_lengkap ?? "?").slice(0, 2).toUpperCase();
   const isHome = pathname === "/";
   const title = judulHalaman(pathname);
