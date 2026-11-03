@@ -222,12 +222,12 @@ export function TambahTransaksiModal({
                   {j.nama}
                 </option>
               ))}
-              <option value="custom">Custom (tulis manual)</option>
+              <option value="custom">Lainnya</option>
             </select>
           </Field>
 
           {jenisId === "custom" && (
-            <Field label="Jenis Tugas Custom">
+            <Field label="Tulis Jenis Tugas">
               <input
                 type="text"
                 placeholder="Tulis jenis tugas..."
