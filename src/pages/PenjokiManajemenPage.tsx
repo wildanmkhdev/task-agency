@@ -43,8 +43,9 @@ type Tab = "penjoki" | "admin";
 export function PenjokiManajemenPage() {
   const { profile, isOwner, teams, teamFilter, setTeamFilter } =
     useScope();
-  /** Penjoki CRUD khusus owner, semua admin read-only (revisi 3 Nov 2026). */
-  const readOnly = !isOwner;
+  /** Owner edit semua; Admin edit timnya sendiri; Sosmed read-only total */
+  const isSosmed = profile?.team?.nama?.toLowerCase().includes('sosmed');
+  const readOnlyGlobal = isSosmed; // Sosmed ga bisa edit sama sekali
   const qc = useQueryClient();
   const formRef = useRef<HTMLDivElement>(null);
 
@@ -179,6 +180,12 @@ export function PenjokiManajemenPage() {
     return urutkanAdmin(admins ?? []);
   }, [admins]);
 
+  /** Check apakah user boleh edit penjoki ini */
+  const canEdit = (penjoki: PenjokiRow) => {
+    if (readOnlyGlobal) return false; // Sosmed ga bisa edit
+    if (isOwner) return true; // Owner edit semua
+    return penjoki.team_id === profile?.team_id; // Admin edit timnya aja
+  };
   // ---- Mutasi ----
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["penjoki-manajemen"] });
@@ -389,7 +396,7 @@ export function PenjokiManajemenPage() {
                       >
                         Semua Tim
                       </button>
-                      {teams.map((t) => (
+                      {teams.filter(t => !t.nama.toLowerCase().includes('sosmed')).map((t) => (
                         <button
                           key={t.id}
                           onClick={() => setTeamFilter(t.id)}
@@ -408,7 +415,7 @@ export function PenjokiManajemenPage() {
               )}
             </div>
             <div className="hidden shrink-0 sm:block">
-              {!readOnly && (
+              {!readOnlyGlobal && (
                 <Button variant="primary" onClick={bukaTambah}>
                   <PlusIcon className="h-4 w-4" />
                   Tambah Penjoki
@@ -457,7 +464,7 @@ export function PenjokiManajemenPage() {
             >
               Semua
             </button>
-            {teams.map((t) => (
+            {teams.filter(t => !t.nama.toLowerCase().includes('sosmed')).map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTeamFilter(t.id)}
@@ -668,7 +675,7 @@ export function PenjokiManajemenPage() {
                       <th className="px-4 py-3 font-bold">Tim</th>
                       <th className="px-4 py-3 font-bold">Rate</th>
                       <th className="px-4 py-3 font-bold">Status</th>
-                      {!readOnly && <th className="px-4 py-3 text-right font-bold">Aksi</th>}
+                      {!readOnlyGlobal && <th className="px-4 py-3 text-right font-bold">Aksi</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -719,24 +726,30 @@ export function PenjokiManajemenPage() {
                             {p.aktif ? "Aktif" : "Nonaktif"}
                           </span>
                         </td>
-                        {!readOnly && (
+                        {!readOnlyGlobal && (
                           <td className="px-4 py-3">
                             <div className="flex justify-end gap-1.5">
-                              <Button variant="ghost" onClick={() => mulaiEdit(p)}>
-                                <PencilSquareIcon className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" onClick={() => toggleAktif.mutate(p)}>
-                                {p.aktif ? "Nonaktifkan" : "Aktifkan"}
-                              </Button>
-                              <Button
-                                variant="danger"
-                                onClick={() => {
-                                  setHapusTarget(p);
-                                  setHapusError(null);
-                                }}
-                              >
-                                <TrashIcon className="h-4 w-4" />
-                              </Button>
+                              {canEdit(p) ? (
+                                <>
+                                  <Button variant="ghost" onClick={() => mulaiEdit(p)}>
+                                    <PencilSquareIcon className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="ghost" onClick={() => toggleAktif.mutate(p)}>
+                                    {p.aktif ? "Nonaktifkan" : "Aktifkan"}
+                                  </Button>
+                                  <Button
+                                    variant="danger"
+                                    onClick={() => {
+                                      setHapusTarget(p);
+                                      setHapusError(null);
+                                    }}
+                                  >
+                                    <TrashIcon className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              ) : (
+                                <span className="text-xs text-text-muted">Tim lain</span>
+                              )}
                             </div>
                           </td>
                         )}
@@ -767,9 +780,11 @@ export function PenjokiManajemenPage() {
               list.map((p) => (
                 <button
                   key={p.id}
-                  onClick={() => mulaiEdit(p)}
-                  disabled={readOnly}
-                  className="card-premium flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors enabled:hover:border-brand-border disabled:cursor-default"
+                  onClick={() => canEdit(p) && mulaiEdit(p)}
+                  disabled={!canEdit(p)}
+                  className={`card-premium flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors ${
+                    canEdit(p) ? 'enabled:hover:border-brand-border' : 'opacity-60 cursor-not-allowed'
+                  }`}
                 >
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-brand-border/60 bg-brand/10 text-[11px] font-extrabold text-gold">
                     {p.nama.slice(0, 2).toUpperCase()}
@@ -794,14 +809,18 @@ export function PenjokiManajemenPage() {
                   >
                     {p.aktif ? "Aktif" : "Nonaktif"}
                   </span>
-                  <ChevronRightIcon className="h-4 w-4 shrink-0 text-text-muted" />
+                  {canEdit(p) ? (
+                    <ChevronRightIcon className="h-4 w-4 shrink-0 text-text-muted" />
+                  ) : (
+                    <span className="text-[10px] text-text-muted shrink-0">Tim lain</span>
+                  )}
                 </button>
               ))
             )}
           </div>
 
           {/* Tombol tambah mengambang (mobile) */}
-          {!showForm && !readOnly && (
+          {!showForm && !readOnlyGlobal && (
             <button
               onClick={bukaTambah}
               className="fixed bottom-24 right-4 z-20 flex items-center gap-2 rounded-full bg-gradient-to-r from-[#cfa84f] via-[#e0bd68] to-[#e9ca7d] px-4 py-3 text-[12px] font-extrabold text-[#12271f] shadow-[0_14px_30px_-12px_rgba(217,180,95,0.9)] sm:hidden"
