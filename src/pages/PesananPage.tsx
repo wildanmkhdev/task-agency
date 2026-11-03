@@ -168,7 +168,7 @@ export function PesananPage() {
                   {(isOwner || readOnly) && <th className="px-4 py-3 font-bold">Tim</th>}
                   <th className="px-4 py-3 text-right font-bold">Harga</th>
                   <th className="px-4 py-3 font-bold">Status</th>
-                  <th className="px-4 py-3 font-bold">Bayar</th>
+                  {!isOwner && <th className="px-4 py-3 font-bold">Bayar</th>}
                   {!readOnly && <th className="px-4 py-3 text-right font-bold">Aksi</th>}
                 </tr>
               </thead>
@@ -198,25 +198,30 @@ export function PesananPage() {
                       )}
                       <td className="px-4 py-3 text-right font-extrabold text-gold-soft tabular">
                         {rupiah(p.harga)}
-                        <p className="mt-0.5 text-[10px] font-medium text-text-muted">
-                          Penjoki {rupiah(fee.feePenjoki)} · CS {rupiah(fee.feeAdmin)}
-                        </p>
-                        <p className="text-[10px] font-medium text-text-muted">
-                          Sosmed {rupiah(fee.feeSosmed)} · Owner {rupiah(fee.feeOwner)}
-                        </p>
+                        {!isOwner && (
+                          <>
+                            <p className="mt-0.5 text-[10px] font-medium text-text-muted">
+                              Penjoki {rupiah(fee.feePenjoki)} · CS {rupiah(fee.feeAdmin)}
+                            </p>
+                            <p className="text-[10px] font-medium text-text-muted">
+                              Sosmed {rupiah(fee.feeSosmed)} · Owner {rupiah(fee.feeOwner)}
+                            </p>
+                          </>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={p.status} />
                       </td>
-                      <td className="px-4 py-3">
-                        {readOnly ? (
-                          <span
-                            className={`inline-flex items-center rounded-lg border px-2 py-1 text-xs font-bold ${warnaBayar(p.status_bayar)}`}
-                          >
-                            {labelBayar(p.status_bayar)}
-                          </span>
-                        ) : (
-                          <select
+                      {!isOwner && (
+                        <td className="px-4 py-3">
+                          {readOnly ? (
+                            <span
+                              className={`inline-flex items-center rounded-lg border px-2 py-1 text-xs font-bold ${warnaBayar(p.status_bayar)}`}
+                            >
+                              {labelBayar(p.status_bayar)}
+                            </span>
+                          ) : (
+                            <select
                             value={p.status_bayar}
                             onChange={(e) =>
                               update.mutate({
@@ -240,13 +245,15 @@ export function PesananPage() {
                             ))}
                           </select>
                         )}
-                        {p.status === "SELESAI" && p.status_bayar !== "LUNAS" && (
+                        {!readOnly && p.status === "SELESAI" && p.status_bayar !== "LUNAS" && (
                           <p className="mt-1 text-[10px] font-semibold text-warning">
                             belum masuk rekap
                           </p>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      )}
+                      {!readOnly && (
+                        <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-1.5">
                           {!readOnly && p.status === "MENUNGU" && (
                             <Button
@@ -287,6 +294,7 @@ export function PesananPage() {
                           )}
                         </div>
                       </td>
+                      )}
                     </tr>
                   );
                 })}
