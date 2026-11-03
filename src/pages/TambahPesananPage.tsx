@@ -365,7 +365,7 @@ export function TambahPesananPage() {
             label="Penjoki"
             hint={
               penjokiDipilih
-                ? `Rating skill: ${penjokiDipilih.rating_skill ?? "-"}`
+                ? `Keahlian: ${(penjokiDipilih.keahlian ?? []).slice(0, 2).join(", ") || "-"}`
                 : "Pilih penjoki sesuai keahlian & ketersediaan."
             }
           >

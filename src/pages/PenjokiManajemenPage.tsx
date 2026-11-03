@@ -12,6 +12,7 @@ import {
   labelJabatan,
   namaLengkapAdmin,
   urutkanAdmin,
+  hanyaBaca,
 } from "../lib/admin";
 import {
   Button,
@@ -46,6 +47,8 @@ export function PenjokiManajemenPage() {
   const { profile, isOwner, teams, teamFilter, setTeamFilter, scopedTeamId, applyScope } =
     useScope();
   const { profile: me } = useAuth();
+  /** Admin sosmed hanya boleh melihat data (revisi 3 Nov 2026). */
+  const readOnly = hanyaBaca(profile);
   const qc = useQueryClient();
   const formRef = useRef<HTMLDivElement>(null);
 
@@ -62,7 +65,6 @@ export function PenjokiManajemenPage() {
   const [fNama, setFNama] = useState("");
   const [fWa, setFWa] = useState("");
   const [fTim, setFTim] = useState("");
-  const [fRating, setFRating] = useState("");
   const [fKeahlian, setFKeahlian] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [fKeterangan, setFKeterangan] = useState("");
@@ -96,6 +98,32 @@ export function PenjokiManajemenPage() {
       const m = new Map<string, number>();
       for (const r of data ?? []) m.set(r.penjoki_id, (m.get(r.penjoki_id) ?? 0) + 1);
       return m;
+    },
+  });
+
+  // Rate keaktifan bulan berjalan — revisi 2: metrik "Rating Skill" dihapus,
+  // yang ditampilkan hanya "Rate" hasil transaksi.
+  const { data: rateBulanIni } = useQuery({
+    queryKey: ["penjoki-rate-manajemen"],
+    queryFn: async (): Promise<Map<string, number>> => {
+      const { data, error } = await supabase
+        .from("pesanan")
+        .select("penjoki_id, status, status_bayar")
+        .gte("tanggal", awalBulanIni());
+      if (error) throw error;
+      const acc = new Map<string, { selesai: number; total: number }>();
+      for (const r of data ?? []) {
+        if (r.status === "BATAL") continue;
+        const cur = acc.get(r.penjoki_id) ?? { selesai: 0, total: 0 };
+        cur.total += 1;
+        if (r.status === "SELESAI" && r.status_bayar === "LUNAS") cur.selesai += 1;
+        acc.set(r.penjoki_id, cur);
+      }
+      const out = new Map<string, number>();
+      for (const [id, s] of acc) {
+        out.set(id, s.total === 0 ? 0 : Math.round((s.selesai / s.total) * 100));
+      }
+      return out;
     },
   });
 
@@ -150,6 +178,7 @@ export function PenjokiManajemenPage() {
     qc.invalidateQueries({ queryKey: ["penjoki-manajemen"] });
     qc.invalidateQueries({ queryKey: ["penjoki"] });
     qc.invalidateQueries({ queryKey: ["penjoki-tugas-bulan-ini"] });
+    qc.invalidateQueries({ queryKey: ["penjoki-rate-manajemen"] });
   };
 
   const resetForm = () => {
@@ -158,7 +187,6 @@ export function PenjokiManajemenPage() {
     setFNama("");
     setFWa("");
     setFTim("");
-    setFRating("");
     setFKeahlian([]);
     setTagInput("");
     setFKeterangan("");
@@ -178,7 +206,6 @@ export function PenjokiManajemenPage() {
     setFNama(p.nama);
     setFWa(p.no_hp ?? "");
     setFTim(p.team_id);
-    setFRating(p.rating_skill != null ? String(p.rating_skill) : "");
     setFKeahlian(p.keahlian ?? []);
     setFKeterangan(p.keterangan ?? "");
     setShowForm(true);
@@ -191,17 +218,10 @@ export function PenjokiManajemenPage() {
       if (!nama) throw new Error("Nama wajib diisi.");
       const timFinal = isOwner ? fTim : (profile?.team_id ?? "");
       if (!timFinal) throw new Error("Tim wajib dipilih.");
-      let rating: number | null = null;
-      if (fRating.trim()) {
-        rating = Number(fRating);
-        if (!Number.isFinite(rating) || rating < 0 || rating > 100)
-          throw new Error("Rate harus antara 0–100.");
-      }
       const payload = {
         nama,
         no_hp: fWa.trim() || null,
         team_id: timFinal,
-        rating_skill: rating,
         keahlian: fKeahlian,
         keterangan: fKeterangan.trim() || null,
       };
@@ -382,10 +402,12 @@ export function PenjokiManajemenPage() {
               )}
             </div>
             <div className="hidden shrink-0 sm:block">
-              <Button variant="primary" onClick={bukaTambah}>
-                <PlusIcon className="h-4 w-4" />
-                Tambah Penjoki
-              </Button>
+              {!readOnly && (
+                <Button variant="primary" onClick={bukaTambah}>
+                  <PlusIcon className="h-4 w-4" />
+                  Tambah Penjoki
+                </Button>
+              )}
             </div>
           </div>
 
@@ -482,17 +504,6 @@ export function PenjokiManajemenPage() {
                             </option>
                           ))}
                       </select>
-                    </Field>
-                    <Field label="Rate (0–100)" hint="Kosongkan bila belum tahu.">
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={fRating}
-                        onChange={(e) => setFRating(e.target.value)}
-                        className={inputCls}
-                        placeholder="85"
-                      />
                     </Field>
                   </div>
 
@@ -633,7 +644,7 @@ export function PenjokiManajemenPage() {
                       <th className="px-4 py-3 font-bold">Keahlian</th>
                       <th className="px-4 py-3 text-center font-bold">Tugas bulan ini</th>
                       <th className="px-4 py-3 font-bold">Status</th>
-                      <th className="px-4 py-3 text-right font-bold">Aksi</th>
+                      {!readOnly && <th className="px-4 py-3 text-right font-bold">Aksi</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -659,7 +670,7 @@ export function PenjokiManajemenPage() {
                           {p.team?.nama ?? "-"}
                         </td>
                         <td className="px-4 py-3">
-                          <RateBadge rate={p.rating_skill} />
+                          <RateBadge rate={rateBulanIni?.get(p.id) ?? null} />
                         </td>
                         <td className="px-4 py-3">
                           <div
@@ -701,25 +712,27 @@ export function PenjokiManajemenPage() {
                             {p.aktif ? "Aktif" : "Nonaktif"}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="flex justify-end gap-1.5">
-                            <Button variant="ghost" onClick={() => mulaiEdit(p)}>
-                              <PencilSquareIcon className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" onClick={() => toggleAktif.mutate(p)}>
-                              {p.aktif ? "Nonaktifkan" : "Aktifkan"}
-                            </Button>
-                            <Button
-                              variant="danger"
-                              onClick={() => {
-                                setHapusTarget(p);
-                                setHapusError(null);
-                              }}
-                            >
-                              <TrashIcon className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
+                        {!readOnly && (
+                          <td className="px-4 py-3">
+                            <div className="flex justify-end gap-1.5">
+                              <Button variant="ghost" onClick={() => mulaiEdit(p)}>
+                                <PencilSquareIcon className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" onClick={() => toggleAktif.mutate(p)}>
+                                {p.aktif ? "Nonaktifkan" : "Aktifkan"}
+                              </Button>
+                              <Button
+                                variant="danger"
+                                onClick={() => {
+                                  setHapusTarget(p);
+                                  setHapusError(null);
+                                }}
+                              >
+                                <TrashIcon className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -742,7 +755,8 @@ export function PenjokiManajemenPage() {
                 <button
                   key={p.id}
                   onClick={() => mulaiEdit(p)}
-                  className="card-premium flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors hover:border-brand-border"
+                  disabled={readOnly}
+                  className="card-premium flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors enabled:hover:border-brand-border disabled:cursor-default"
                 >
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-brand-border/60 bg-brand/10 text-[11px] font-extrabold text-gold">
                     {p.nama.slice(0, 2).toUpperCase()}
@@ -752,7 +766,10 @@ export function PenjokiManajemenPage() {
                       {p.nama}
                     </span>
                     <span className="block truncate text-[11px] text-text-muted">
-                      {p.team?.nama ?? "-"} · Rate {p.rating_skill ?? "—"}
+                      {p.team?.nama ?? "-"} · Rate{" "}
+                      {rateBulanIni?.has(p.id)
+                        ? `${rateBulanIni.get(p.id)}%`
+                        : "—"}
                     </span>
                   </span>
                   <span
@@ -771,7 +788,7 @@ export function PenjokiManajemenPage() {
           </div>
 
           {/* Tombol tambah mengambang (mobile) */}
-          {!showForm && (
+          {!showForm && !readOnly && (
             <button
               onClick={bukaTambah}
               className="fixed bottom-24 right-4 z-20 flex items-center gap-2 rounded-full bg-gradient-to-r from-[#cfa84f] via-[#e0bd68] to-[#e9ca7d] px-4 py-3 text-[12px] font-extrabold text-[#12271f] shadow-[0_14px_30px_-12px_rgba(217,180,95,0.9)] sm:hidden"

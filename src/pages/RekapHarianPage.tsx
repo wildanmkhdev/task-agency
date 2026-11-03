@@ -4,28 +4,37 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
 import { useAuth } from "../context/AuthContext";
-import { rupiah, tanggalPanjang, yyyyMmDd } from "../lib/format";
+import { rupiah, yyyyMmDd } from "../lib/format";
 import { masukRekap, type Pesanan, type Profile } from "../lib/types";
-import { jenisAdmin, namaLengkapAdmin, urutkanAdmin } from "../lib/admin";
+import {
+  jenisAdmin,
+  namaLengkapAdmin,
+  urutkanAdmin,
+} from "../lib/admin";
+import {
+  geserPeriode,
+  labelPembanding,
+  rentangPeriode,
+  type Periode,
+} from "../lib/periode";
+import { PeriodeTabs } from "../components/PeriodeTabs";
 import { Card, EmptyState, Spinner } from "../components/ui";
 
 const PESANAN_SELECT =
   "id, harga, status, status_bayar, tanggal, dibuat_oleh, penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama)";
-
-function geserTanggal(tanggal: string, hari: number): string {
-  const d = new Date(`${tanggal}T00:00:00`);
-  d.setDate(d.getDate() + hari);
-  return yyyyMmDd(d);
-}
 
 function persenPerubahan(now: number, prev: number): number | null {
   if (!prev) return null;
   return ((now - prev) / prev) * 100;
 }
 
-function Trend({ value }: { value: number | null }) {
+function Trend({ value, periode }: { value: number | null; periode: Periode }) {
   if (value === null)
-    return <span className="text-[11px] font-semibold text-text-muted">— dari kemarin</span>;
+    return (
+      <span className="text-[11px] font-semibold text-text-muted">
+        — {labelPembanding(periode)}
+      </span>
+    );
   const naik = value >= 0;
   return (
     <span
@@ -33,47 +42,50 @@ function Trend({ value }: { value: number | null }) {
         naik ? "text-emerald-300" : "text-danger"
       }`}
     >
-      {naik ? "↑" : "↓"} {Math.abs(value).toFixed(0)}% dari kemarin
+      {naik ? "↑" : "↓"} {Math.abs(value).toFixed(0)}% {labelPembanding(periode)}
     </span>
   );
 }
 
 /**
- * Data Rekap Harian Tim — revisi client:
- * - Lingkaran/card tetap, "Total Transaksi" → "Total Pendapatan"
- * - % naik/turun dibanding pendapatan kemarin (reset 00.00 / 24 jam)
- * - Tombol "Lihat Detail Rekap" dihapus → klik nama admin langsung ke detail
- * - Nama tanpa suffix "cs"; admin sosmed paling bawah.
+ * Data Rekap Tim — revisi client 3 Nov 2026:
+ * - Periode Harian / Mingguan / Bulanan.
+ * - Admin CS & Admin Utama: hanya melihat miliknya sendiri.
+ * - Admin Sosmed: melihat seluruh admin (read-only) + total pendapatan agency.
+ * - Owner: seluruh admin & seluruh tim.
  */
 export function RekapHarianPage() {
   const { isOwner } = useScope();
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const [periode, setPeriode] = useState<Periode>("harian");
   const [tanggal, setTanggal] = useState(yyyyMmDd(new Date()));
-  const kemarin = geserTanggal(tanggal, -1);
 
-  const { data: rowsHariIni, isLoading } = useQuery({
-    queryKey: ["rekap", tanggal],
+  const rentang = rentangPeriode(periode, tanggal);
+  const sosmed = profile ? jenisAdmin(profile) === "sosmed" : false;
+
+  const { data: rowsPeriode, isLoading } = useQuery({
+    queryKey: ["rekap", rentang.mulaiIso, rentang.selesaiIso],
     queryFn: async (): Promise<Pesanan[]> => {
       const { data, error } = await supabase
         .from("pesanan")
         .select(PESANAN_SELECT)
-        .gte("tanggal", new Date(`${tanggal}T00:00:00`).toISOString())
-        .lte("tanggal", new Date(`${tanggal}T23:59:59.999`).toISOString())
+        .gte("tanggal", rentang.mulaiIso)
+        .lte("tanggal", rentang.selesaiIso)
         .order("tanggal", { ascending: true });
       if (error) throw error;
       return (data ?? []) as unknown as Pesanan[];
     },
   });
 
-  const { data: rowsKemarin } = useQuery({
-    queryKey: ["rekap", kemarin],
+  const { data: rowsSebelumnya } = useQuery({
+    queryKey: ["rekap", rentang.sebelumnya.mulaiIso, rentang.sebelumnya.selesaiIso],
     queryFn: async (): Promise<Pesanan[]> => {
       const { data, error } = await supabase
         .from("pesanan")
         .select(PESANAN_SELECT)
-        .gte("tanggal", new Date(`${kemarin}T00:00:00`).toISOString())
-        .lte("tanggal", new Date(`${kemarin}T23:59:59.999`).toISOString());
+        .gte("tanggal", rentang.sebelumnya.mulaiIso)
+        .lte("tanggal", rentang.sebelumnya.selesaiIso);
       if (error) throw error;
       return (data ?? []) as unknown as Pesanan[];
     },
@@ -91,47 +103,53 @@ export function RekapHarianPage() {
     },
   });
 
-  const rekapHariIni = (rowsHariIni ?? []).filter(masukRekap);
-  const rekapKemarin = (rowsKemarin ?? []).filter(masukRekap);
+  const rekap = (rowsPeriode ?? []).filter(masukRekap);
+  const rekapSebelumnya = (rowsSebelumnya ?? []).filter(masukRekap);
 
-  // Owner & admin sosmed melihat total agency; admin CS melihat miliknya sendiri.
-  const lihatSemua =
-    isOwner || (profile ? jenisAdmin(profile) === "sosmed" : false);
+  // Owner & sosmed melihat total agency; admin CS/utama hanya miliknya.
+  const lihatSemua = isOwner || sosmed;
   const dalamScope = (rows: Pesanan[]) =>
     lihatSemua ? rows : rows.filter((p) => p.dibuat_oleh === profile?.id);
 
-  const rekapScope = dalamScope(rekapHariIni);
-  const rekapScopeKemarin = dalamScope(rekapKemarin);
+  const rekapScope = dalamScope(rekap);
+  const rekapScopeSebelumnya = dalamScope(rekapSebelumnya);
 
   const totalPendapatan = rekapScope.reduce((s, p) => s + p.harga, 0);
-  const totalPendapatanKemarin = rekapScopeKemarin.reduce((s, p) => s + p.harga, 0);
+  const totalPendapatanSebelumnya = rekapScopeSebelumnya.reduce((s, p) => s + p.harga, 0);
 
   const daftarAdmin = useMemo(() => {
     const base = urutkanAdmin(admins ?? []);
-    // Admin biasa hanya melihat dirinya sendiri (RLS juga membatasi).
-    const terlihat = isOwner
-      ? base
-      : base.filter((a) => a.id === profile?.id);
+    // Admin CS/utama hanya melihat dirinya sendiri; owner & sosmed melihat semua.
+    const terlihat = lihatSemua ? base : base.filter((a) => a.id === profile?.id);
     return terlihat.map((a) => {
-      const milik = rekapHariIni.filter((p) => p.dibuat_oleh === a.id);
+      /**
+       * Baris milik admin sosmed = akumulasi SEMUA tim (permintaan client),
+       * supaya angka di daftar sama dengan angka di ruangannya.
+       */
+      const gabungan = sosmed && a.id === profile?.id;
+      const milik = gabungan ? rekap : rekap.filter((p) => p.dibuat_oleh === a.id);
       return {
         admin: a,
         jumlah: milik.length,
         pendapatan: milik.reduce((s, p) => s + p.harga, 0),
+        gabungan,
       };
     });
-  }, [admins, isOwner, profile?.id, rekapHariIni]);
+  }, [admins, lihatSemua, sosmed, profile?.id, rekap]);
 
-  if (isLoading) return <Spinner label="Memuat rekap harian…" />;
+  if (isLoading) return <Spinner label="Memuat rekap…" />;
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
+      {/* Periode */}
+      <PeriodeTabs value={periode} onChange={setPeriode} />
+
       {/* Navigasi tanggal */}
       <div className="flex items-center justify-center gap-3">
         <button
-          onClick={() => setTanggal(geserTanggal(tanggal, -1))}
+          onClick={() => setTanggal(geserPeriode(periode, tanggal, -1))}
           className="rounded-full border border-line bg-surface-2 p-2 text-text-secondary hover:border-brand-border hover:text-gold"
-          aria-label="Hari sebelumnya"
+          aria-label="Periode sebelumnya"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.2}>
             <path d="m15 6-6 6 6 6" />
@@ -142,25 +160,32 @@ export function RekapHarianPage() {
             <rect x="3" y="5" width="18" height="16" rx="2.5" />
             <path d="M8 3v4M16 3v4M3 10h18" />
           </svg>
-          <span>{tanggalPanjang(`${tanggal}T00:00:00`)}</span>
+          <span>{rentang.label}</span>
           <input
             type="date"
             value={tanggal}
-            onChange={(e) => setTanggal(e.target.value)}
+            onChange={(e) => setTanggal(e.target.value || yyyyMmDd(new Date()))}
             className="absolute inset-0 cursor-pointer opacity-0"
-            aria-label="Pilih tanggal"
+            aria-label="Pilih tanggal acuan"
           />
         </label>
         <button
-          onClick={() => setTanggal(geserTanggal(tanggal, 1))}
+          onClick={() => setTanggal(geserPeriode(periode, tanggal, 1))}
           className="rounded-full border border-line bg-surface-2 p-2 text-text-secondary hover:border-brand-border hover:text-gold"
-          aria-label="Hari berikutnya"
+          aria-label="Periode berikutnya"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.2}>
             <path d="m9 6 6 6-6 6" />
           </svg>
         </button>
       </div>
+
+      {sosmed && (
+        <p className="rounded-2xl border border-fuchsia-400/25 bg-fuchsia-400/10 px-4 py-2.5 text-[11px] font-semibold text-fuchsia-300">
+          Mode <strong>hanya lihat</strong> — kamu dapat memantau pemasukan semua
+          tim, tetapi tidak dapat menambah atau mengubah transaksi.
+        </p>
+      )}
 
       {/* 2 kotak utama */}
       <div className="grid grid-cols-2 gap-3">
@@ -180,7 +205,10 @@ export function RekapHarianPage() {
             {rupiah(totalPendapatan)}
           </p>
           <div className="mt-1">
-            <Trend value={persenPerubahan(totalPendapatan, totalPendapatanKemarin)} />
+            <Trend
+              value={persenPerubahan(totalPendapatan, totalPendapatanSebelumnya)}
+              periode={periode}
+            />
           </div>
         </div>
 
@@ -200,7 +228,10 @@ export function RekapHarianPage() {
             {rekapScope.length}
           </p>
           <div className="mt-1">
-            <Trend value={persenPerubahan(rekapScope.length, rekapScopeKemarin.length)} />
+            <Trend
+              value={persenPerubahan(rekapScope.length, rekapScopeSebelumnya.length)}
+              periode={periode}
+            />
           </div>
         </div>
       </div>
@@ -209,7 +240,7 @@ export function RekapHarianPage() {
       <div>
         <div className="mb-2 flex items-center justify-between px-1">
           <h3 className="font-display text-sm font-extrabold text-text-main">
-            Rekap per Admin CS
+            Rekap per Admin
           </h3>
           <span className="text-[11px] font-semibold text-text-muted">
             Klik nama untuk detail
@@ -225,12 +256,16 @@ export function RekapHarianPage() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {daftarAdmin.map(({ admin, jumlah, pendapatan }) => {
+            {daftarAdmin.map(({ admin, jumlah, pendapatan, gabungan }) => {
               const nama = namaLengkapAdmin(admin);
               return (
                 <button
                   key={admin.id}
-                  onClick={() => navigate(`/rekap/${admin.id}?tanggal=${tanggal}`)}
+                  onClick={() =>
+                    navigate(
+                      `/rekap/${admin.id}?tanggal=${tanggal}&periode=${periode}`
+                    )
+                  }
                   className="group flex w-full items-center gap-3 rounded-2xl border border-line bg-surface/80 px-4 py-3 text-left transition-all hover:border-brand-border hover:bg-surface-2"
                 >
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-brand-border/60 bg-brand/10 text-xs font-extrabold text-gold">
@@ -238,7 +273,14 @@ export function RekapHarianPage() {
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold text-text-main">{nama}</p>
-                    <p className="text-[11px] text-text-muted">{jumlah} Transaksi</p>
+                    <p className="text-[11px] text-text-muted">
+                      {jumlah} Transaksi
+                      {gabungan && (
+                        <span className="ml-1.5 rounded-full border border-fuchsia-400/25 bg-fuchsia-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-fuchsia-300">
+                          semua tim
+                        </span>
+                      )}
+                    </p>
                   </div>
                   <span className="shrink-0 text-sm font-extrabold text-gold-soft tabular">
                     {rupiah(pendapatan)}

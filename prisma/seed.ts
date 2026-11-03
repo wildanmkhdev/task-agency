@@ -4,14 +4,14 @@ const prisma = new PrismaClient();
 
 /**
  * Seed data dasar (idempotent — aman dijalankan berulang):
- * 1. Tim 1..5
+ * 1. Tim: Tim 1..5 + Sosmed (tim khusus admin sosmed, read-only lintas tim)
  * 2. Master jenis tugas
  * 3. 23 penjoki Tim 3/4/5 — diketik dari PDF "REKAP DATA PENJOKI JOKITUGASAJA_ID"
  *    (Tim 1 & Tim 2 menyusul dari client — Decision D7)
  */
 async function main() {
   // 1. Tim
-  const timNames = ["Tim 1", "Tim 2", "Tim 3", "Tim 4", "Tim 5"];
+  const timNames = ["Tim 1", "Tim 2", "Tim 3", "Tim 4", "Tim 5", "Sosmed"];
   const teams = new Map<string, string>();
   for (const nama of timNames) {
     const t = await prisma.team.upsert({

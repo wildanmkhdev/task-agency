@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Navigate, Outlet, createBrowserRouter } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { hanyaBaca } from "./lib/admin";
 import { AppLayout } from "./components/AppLayout";
 import { Spinner } from "./components/ui";
 import { LoginPage } from "./pages/LoginPage";
@@ -34,6 +35,16 @@ function RequireAuth() {
   );
 }
 
+/**
+ * Guard halaman tulis. Admin sosmed read-only (revisi 3 Nov 2026) dialihkan
+ * ke rekap — UI dan RLS sama-sama menolak, jadi tidak ada jalan masuk.
+ */
+function RequireTulis({ children }: { children: ReactNode }) {
+  const { profile } = useAuth();
+  if (hanyaBaca(profile)) return <Navigate to="/rekap" replace />;
+  return <>{children}</>;
+}
+
 export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
   {
@@ -43,7 +54,7 @@ export const router = createBrowserRouter([
       { path: "/rekap", element: <RekapHarianPage /> },
       { path: "/rekap/:adminId", element: <DetailRekapPage /> },
       { path: "/pesanan", element: <PesananPage /> },
-      { path: "/pesanan/baru", element: <TambahPesananPage /> },
+      { path: "/pesanan/baru", element: <RequireTulis><TambahPesananPage /></RequireTulis> },
       { path: "/penjoki", element: <PenjokiPage /> },
       { path: "/penjoki/manajemen", element: <PenjokiManajemenPage /> },
       { path: "/jadwal", element: <JadwalSetorPage /> },

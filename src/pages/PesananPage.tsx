@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
+import { useAuth } from "../context/AuthContext";
+import { hanyaBaca } from "../lib/admin";
 import { rupiah, tanggalPendek } from "../lib/format";
 import type { Pesanan, PesananStatus, StatusBayar } from "../lib/types";
 import { hitungFee } from "../lib/fee";
@@ -25,9 +27,21 @@ const OpsiBayar: { value: StatusBayar; label: string }[] = [
   { value: "LUNAS", label: "Lunas" },
 ];
 
+const warnaBayar = (s: StatusBayar) =>
+  s === "LUNAS"
+    ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
+    : s === "CICIL"
+      ? "border-amber-400/25 bg-amber-400/10 text-warning"
+      : "border-red-400/25 bg-red-400/10 text-danger";
+
+const labelBayar = (s: StatusBayar) =>
+  OpsiBayar.find((o) => o.value === s)?.label ?? s;
+
 /** Daftar Transaksi + kendali lifecycle (scoping via RLS). */
 export function PesananPage() {
   const { isOwner, teams, teamFilter, setTeamFilter, applyScope } = useScope();
+  const { profile } = useAuth();
+  const readOnly = hanyaBaca(profile);
   const [statusFilter, setStatusFilter] = useState<"SEMUA" | PesananStatus>("SEMUA");
   const qc = useQueryClient();
 
@@ -76,7 +90,7 @@ export function PesananPage() {
     { key: "customer", label: "Customer", render: (r) => String(r.customer) },
     { key: "jenis", label: "Jenis Tugas", render: (r) => String(r.jenis) },
     { key: "penjoki", label: "Penjoki", render: (r) => String(r.penjoki) },
-    ...(isOwner
+    ...(isOwner || readOnly
       ? [{ key: "tim", label: "Tim", render: (r: Record<string, unknown>) => String(r.tim) }]
       : []),
     { key: "harga", label: "Payment Customer", currency: true },
@@ -136,7 +150,9 @@ export function PesananPage() {
         />
       </div>
 
-      {isOwner && <TeamTabs teams={teams} value={teamFilter} onChange={setTeamFilter} />}
+      {(isOwner || readOnly) && (
+        <TeamTabs teams={teams} value={teamFilter} onChange={setTeamFilter} />
+      )}
 
       <Card className="hidden overflow-hidden sm:block">
         {list.length === 0 ? (
@@ -149,11 +165,11 @@ export function PesananPage() {
                   <th className="px-4 py-3 font-bold">Kode</th>
                   <th className="px-4 py-3 font-bold">Customer / Tugas</th>
                   <th className="px-4 py-3 font-bold">Penjoki</th>
-                  {isOwner && <th className="px-4 py-3 font-bold">Tim</th>}
+                  {(isOwner || readOnly) && <th className="px-4 py-3 font-bold">Tim</th>}
                   <th className="px-4 py-3 text-right font-bold">Harga</th>
                   <th className="px-4 py-3 font-bold">Status</th>
                   <th className="px-4 py-3 font-bold">Bayar</th>
-                  <th className="px-4 py-3 text-right font-bold">Aksi</th>
+                  {!readOnly && <th className="px-4 py-3 text-right font-bold">Aksi</th>}
                 </tr>
               </thead>
               <tbody>
@@ -175,7 +191,7 @@ export function PesananPage() {
                         </p>
                       </td>
                       <td className="px-4 py-3 text-text-secondary">{p.penjoki?.nama ?? "-"}</td>
-                      {isOwner && (
+                      {(isOwner || readOnly) && (
                         <td className="px-4 py-3 text-xs font-bold text-text-secondary">
                           {p.team?.nama ?? "-"}
                         </td>
@@ -193,33 +209,37 @@ export function PesananPage() {
                         <StatusBadge status={p.status} />
                       </td>
                       <td className="px-4 py-3">
-                        <select
-                          value={p.status_bayar}
-                          onChange={(e) =>
-                            update.mutate({
-                              id: p.id,
-                              patch: { status_bayar: e.target.value as StatusBayar },
-                            })
-                          }
-                          className={`rounded-lg border px-2 py-1 text-xs font-bold outline-none transition-colors ${
-                            p.status_bayar === "LUNAS"
-                              ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
-                              : p.status_bayar === "CICIL"
-                                ? "border-amber-400/25 bg-amber-400/10 text-warning"
-                                : "border-red-400/25 bg-red-400/10 text-danger"
-                          }`}
-                          title={
-                            p.status === "SELESAI" && p.status_bayar !== "LUNAS"
-                              ? "Selesai tapi belum lunas — belum masuk rekap"
-                              : "Status pembayaran customer"
-                          }
-                        >
-                          {OpsiBayar.map((o) => (
-                            <option key={o.value} value={o.value}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
+                        {readOnly ? (
+                          <span
+                            className={`inline-flex items-center rounded-lg border px-2 py-1 text-xs font-bold ${warnaBayar(p.status_bayar)}`}
+                          >
+                            {labelBayar(p.status_bayar)}
+                          </span>
+                        ) : (
+                          <select
+                            value={p.status_bayar}
+                            onChange={(e) =>
+                              update.mutate({
+                                id: p.id,
+                                patch: { status_bayar: e.target.value as StatusBayar },
+                              })
+                            }
+                            className={`rounded-lg border px-2 py-1 text-xs font-bold outline-none transition-colors ${warnaBayar(
+                              p.status_bayar
+                            )}`}
+                            title={
+                              p.status === "SELESAI" && p.status_bayar !== "LUNAS"
+                                ? "Selesai tapi belum lunas — belum masuk rekap"
+                                : "Status pembayaran customer"
+                            }
+                          >
+                            {OpsiBayar.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                         {p.status === "SELESAI" && p.status_bayar !== "LUNAS" && (
                           <p className="mt-1 text-[10px] font-semibold text-warning">
                             belum masuk rekap
@@ -228,7 +248,7 @@ export function PesananPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-1.5">
-                          {p.status === "MENUNGU" && (
+                          {!readOnly && p.status === "MENUNGU" && (
                             <Button
                               variant="primary"
                               onClick={() =>
@@ -238,7 +258,7 @@ export function PesananPage() {
                               Kerjakan
                             </Button>
                           )}
-                          {p.status === "DIKERJAKAN" && (
+                          {!readOnly && p.status === "DIKERJAKAN" && (
                             <Button
                               variant="success"
                               title="Tandai selesai (masuk rekap bila sudah Lunas)"
@@ -255,7 +275,7 @@ export function PesananPage() {
                               Selesai
                             </Button>
                           )}
-                          {(p.status === "MENUNGU" || p.status === "DIKERJAKAN") && (
+                          {!readOnly && (p.status === "MENUNGU" || p.status === "DIKERJAKAN") && (
                             <Button
                               variant="danger"
                               onClick={() =>
@@ -282,7 +302,11 @@ export function PesananPage() {
           <Card>
             <EmptyState
               title="Tidak ada transaksi"
-              hint="Ubah filter atau input transaksi baru."
+              hint={
+                readOnly
+                  ? "Ubah filter untuk melihat transaksi lain."
+                  : "Ubah filter atau input transaksi baru."
+              }
             />
           </Card>
         ) : (
@@ -326,65 +350,73 @@ export function PesananPage() {
                       Sosmed {rupiah(fee.feeSosmed)} · Owner {rupiah(fee.feeOwner)}
                     </p>
                   </div>
-                  <select
-                    value={p.status_bayar}
-                    onChange={(e) =>
-                      update.mutate({
-                        id: p.id,
-                        patch: { status_bayar: e.target.value as StatusBayar },
-                      })
-                    }
-                    className={`rounded-lg border px-2 py-1 text-[11px] font-bold outline-none ${
-                      p.status_bayar === "LUNAS"
-                        ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
-                        : p.status_bayar === "CICIL"
-                          ? "border-amber-400/25 bg-amber-400/10 text-warning"
-                          : "border-red-400/25 bg-red-400/10 text-danger"
-                    }`}
-                  >
-                    {OpsiBayar.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="mt-3 flex gap-2">
-                  {p.status === "MENUNGU" && (
-                    <Button
-                      variant="primary"
-                      className="flex-1"
-                      onClick={() =>
-                        update.mutate({ id: p.id, patch: { status: "DIKERJAKAN" } })
-                      }
+                  {readOnly ? (
+                    <span
+                      className={`inline-flex items-center rounded-lg border px-2 py-1 text-[11px] font-bold ${warnaBayar(
+                        p.status_bayar
+                      )}`}
                     >
-                      Kerjakan
-                    </Button>
-                  )}
-                  {p.status === "DIKERJAKAN" && (
-                    <Button
-                      variant="success"
-                      className="flex-1"
-                      onClick={() =>
+                      {labelBayar(p.status_bayar)}
+                    </span>
+                  ) : (
+                    <select
+                      value={p.status_bayar}
+                      onChange={(e) =>
                         update.mutate({
                           id: p.id,
-                          patch: { status: "SELESAI", selesai_at: new Date().toISOString() },
+                          patch: { status_bayar: e.target.value as StatusBayar },
                         })
                       }
+                      className={`rounded-lg border px-2 py-1 text-[11px] font-bold outline-none ${warnaBayar(
+                        p.status_bayar
+                      )}`}
                     >
-                      Selesai
-                    </Button>
-                  )}
-                  {(p.status === "MENUNGU" || p.status === "DIKERJAKAN") && (
-                    <Button
-                      variant="danger"
-                      onClick={() => update.mutate({ id: p.id, patch: { status: "BATAL" } })}
-                    >
-                      Batal
-                    </Button>
+                      {OpsiBayar.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
                   )}
                 </div>
+
+                {!readOnly && (
+                  <div className="mt-3 flex gap-2">
+                    {p.status === "MENUNGU" && (
+                      <Button
+                        variant="primary"
+                        className="flex-1"
+                        onClick={() =>
+                          update.mutate({ id: p.id, patch: { status: "DIKERJAKAN" } })
+                        }
+                      >
+                        Kerjakan
+                      </Button>
+                    )}
+                    {p.status === "DIKERJAKAN" && (
+                      <Button
+                        variant="success"
+                        className="flex-1"
+                        onClick={() =>
+                          update.mutate({
+                            id: p.id,
+                            patch: { status: "SELESAI", selesai_at: new Date().toISOString() },
+                          })
+                        }
+                      >
+                        Selesai
+                      </Button>
+                    )}
+                    {(p.status === "MENUNGU" || p.status === "DIKERJAKAN") && (
+                      <Button
+                        variant="danger"
+                        onClick={() => update.mutate({ id: p.id, patch: { status: "BATAL" } })}
+                      >
+                        Batal
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })

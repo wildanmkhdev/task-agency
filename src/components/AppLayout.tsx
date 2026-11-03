@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { hanyaBaca } from "../lib/admin";
 import logoMark from "../assets/logo-mark.png";
 import {
   ArrowLeftIcon,
@@ -71,6 +72,20 @@ const MENU_OPERASIONAL: MenuItem[] = [
   { to: "/penjoki", label: "Laporan", icon: ChartPieIcon },
 ];
 
+/** Item yang butuh izin tulis — disembunyikan untuk peran read-only (sosmed). */
+const MENU_TULIS = new Set(["/pesanan/baru"]);
+
+/**
+ * Menu operasional sesuai hak akses.
+ * Admin sosmed bersifat read-only (revisi 3 Nov 2026) → tidak melihat
+ * "Input Fee" karena memang tidak boleh menambah transaksi.
+ */
+function menuOperasionalSesuaiAkses(readOnly: boolean): MenuItem[] {
+  return readOnly
+    ? MENU_OPERASIONAL.filter((m) => !MENU_TULIS.has(m.to))
+    : MENU_OPERASIONAL;
+}
+
 function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`flex items-center gap-2.5 ${compact ? "justify-center" : ""}`}>
@@ -132,7 +147,9 @@ function NavRow({
 function DrawerContent({ onNavigate }: { onNavigate: () => void }) {
   const { profile, signOut } = useAuth();
   const { pathname } = useLocation();
-  const activeTo = activePath(pathname, [...MENU_UTAMA, ...MENU_OPERASIONAL]);
+  const readOnly = hanyaBaca(profile);
+  const menuOps = menuOperasionalSesuaiAkses(readOnly);
+  const activeTo = activePath(pathname, [...MENU_UTAMA, ...menuOps]);
 
   return (
     <div className="flex h-full flex-col bg-navy text-white">
@@ -164,7 +181,7 @@ function DrawerContent({ onNavigate }: { onNavigate: () => void }) {
         <p className="px-3 pb-1 pt-4 text-[10px] font-bold uppercase tracking-[0.2em] text-text-muted">
           Operasional
         </p>
-        {MENU_OPERASIONAL.map((m) => (
+        {menuOps.map((m) => (
           <NavRow key={m.to} item={m} active={activeTo === m.to} onNavigate={onNavigate} />
         ))}
       </nav>
@@ -233,10 +250,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const isOwner = profile?.role === "OWNER";
+  const readOnly = hanyaBaca(profile);
+  const menuOps = menuOperasionalSesuaiAkses(readOnly);
   const initials = (profile?.nama_lengkap ?? "?").slice(0, 2).toUpperCase();
   const isHome = pathname === "/";
   const title = judulHalaman(pathname);
-  const activeTo = activePath(pathname, [...MENU_UTAMA, ...MENU_OPERASIONAL]);
+  const activeTo = activePath(pathname, [...MENU_UTAMA, ...menuOps]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, collapsed ? "1" : "0");
@@ -293,7 +312,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 Operasional
               </p>
             )}
-            {MENU_OPERASIONAL.map((m) => {
+            {menuOps.map((m) => {
               const Icon = m.icon;
               const active = activeTo === m.to;
               return (
@@ -433,7 +452,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     {isOwner ? "Owner" : profile?.nama_lengkap}
                   </p>
                   <p className="text-[10px] text-text-muted">
-                    {isOwner ? "Semua tim" : (profile?.team?.nama ?? "Admin")}
+                    {isOwner
+                      ? "Semua tim"
+                      : readOnly
+                        ? "Admin Sosmed · hanya lihat"
+                        : (profile?.team?.nama ?? "Admin")}
                   </p>
                 </div>
                 <ChevronRightIcon className="h-3.5 w-3.5 text-text-muted" />

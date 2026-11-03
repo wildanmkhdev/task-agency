@@ -38,7 +38,6 @@ export interface Penjoki {
   nama: string;
   no_hp: string | null;
   team_id: string;
-  rating_skill: number | null;
   keahlian: string[] | null;
   keterangan: string | null;
   aktif: boolean;

@@ -161,8 +161,7 @@ export function PenjokiPage() {
 
                 <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-line-soft pt-2.5">
                   <p className="text-[10px] text-text-muted">
-                    Tugas {stat ? `${stat.selesai}/${stat.total}` : "0"} · Rating{" "}
-                    {p.rating_skill ?? "—"}
+                    Tugas {stat ? `${stat.selesai}/${stat.total}` : "0"}
                   </p>
                   <RateBadge rate={rateOf(p.id)} />
                 </div>
@@ -184,7 +183,6 @@ export function PenjokiPage() {
                   <th className="px-5 py-3 font-bold">Nama Penjoki</th>
                   {isOwner && <th className="px-5 py-3 font-bold">Tim</th>}
                   <th className="px-5 py-3 font-bold">Keahlian</th>
-                  <th className="px-5 py-3 text-center font-bold">Rating Skill</th>
                   <th className="px-5 py-3 text-center font-bold">Tugas (bln ini)</th>
                   <th className="px-5 py-3 text-center font-bold">Rate</th>
                   <th className="px-5 py-3 font-bold">Status</th>
@@ -225,9 +223,6 @@ export function PenjokiPage() {
                             </span>
                           ))}
                         </div>
-                      </td>
-                      <td className="px-5 py-3 text-center font-bold tabular-nums">
-                        {p.rating_skill ?? "-"}
                       </td>
                       <td className="px-5 py-3 text-center tabular-nums">
                         {stat ? `${stat.selesai}/${stat.total}` : "0"}

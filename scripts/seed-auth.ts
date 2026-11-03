@@ -27,7 +27,8 @@ const prisma = new PrismaClient();
 /**
  * Seed akun login (idempotent):
  * - owner@jokitugasaja.id (OWNER)
- * - admin.tim1..5@jokitugasaja.id (ADMIN, terikat 1 tim — D2)
+ * - 5 admin CS/utama (ADMIN, terikat 1 tim — D2)
+ * - 1 admin sosmed (ADMIN, tim "Sosmed") — read-only lintas tim (revisi 3 Nov 2026)
  * Profile dibuat otomatis oleh trigger handle_new_user di database.
  * Password acak dicetak & disimpan ke akun_seed.txt (tidak di-commit).
  */
@@ -35,15 +36,30 @@ async function main() {
   const teams = await prisma.team.findMany({ orderBy: { nama: "asc" } });
   if (teams.length === 0) throw new Error("Jalankan `pnpm db:seed` dulu (tim belum ada).");
 
-  const akun: { email: string; nama: string; role: "OWNER" | "ADMIN"; teamId: string | null }[] = [
-    { email: "owner@jokitugasaja.id", nama: "Owner", role: "OWNER", teamId: null },
-    ...teams.map((t, i) => ({
-      email: `admin.tim${i + 1}@jokitugasaja.id`,
-      nama: `Admin ${t.nama}`,
-      role: "ADMIN" as const,
-      teamId: t.id,
-    })),
+  const teamId = new Map(teams.map((t) => [t.nama, t.id]));
+
+  /** Nama & penempatan mengikuti data produksi (dikonfirmasi client). */
+  const daftarAkun: {
+    email: string;
+    nama: string;
+    role: "OWNER" | "ADMIN";
+    teamNama: string | null;
+  }[] = [
+    { email: "owner@jokitugasaja.id", nama: "Owner", role: "OWNER", teamNama: null },
+    { email: "admin.utama@jokitugasaja.id", nama: "Dea", role: "ADMIN", teamNama: "Tim 1" },
+    { email: "admin.tim2@jokitugasaja.id", nama: "Naim CS", role: "ADMIN", teamNama: "Tim 2" },
+    { email: "admin.tim3@jokitugasaja.id", nama: "Widya CS", role: "ADMIN", teamNama: "Tim 3" },
+    { email: "admin.tim4@jokitugasaja.id", nama: "Vivi CS", role: "ADMIN", teamNama: "Tim 4" },
+    { email: "admin.tim5@jokitugasaja.id", nama: "Annisa CS", role: "ADMIN", teamNama: "Tim 5" },
+    { email: "admin.sosmed@jokitugasaja.id", nama: "Rania", role: "ADMIN", teamNama: "Sosmed" },
   ];
+
+  const akun = daftarAkun.map((a) => ({
+    email: a.email,
+    nama: a.nama,
+    role: a.role,
+    teamId: a.teamNama ? (teamId.get(a.teamNama) ?? null) : null,
+  }));
 
   // Daftar semua user existing (hindari duplikat)
   const { data: existing } = await admin.auth.admin.listUsers({ perPage: 100 });

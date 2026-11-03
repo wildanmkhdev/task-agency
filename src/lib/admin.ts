@@ -18,17 +18,34 @@ export const KETERANGAN_JABATAN: Record<JenisAdmin, string> = {
 
 const norm = (s?: string | null) => (s ?? "").toLowerCase().trim();
 
+/**
+ * Peran admin diturunkan dari DATA, bukan dari nama orang.
+ * Sumber kebenaran: nama tim (tabel `teams`).
+ *   • tim "Sosmed"  → admin sosmed (read-only lintas tim)
+ *   • tim "Tim 1"   → admin utama (tetap hanya timnya sendiri)
+ *   • tim lainnya   → admin CS
+ * Menebak dari nama pribadi ("rania") rapuh: ganti nama → peran berubah.
+ */
 export function jenisAdmin(p: Pick<Profile, "nama_lengkap" | "team">): JenisAdmin {
-  // Kolom jabatan (bila nanti tersedia di DB)
+  // Kolom jabatan (bila nanti tersedia di DB) tetap diprioritaskan.
   const j = norm((p as { jabatan?: string | null }).jabatan);
   if (j.includes("sosmed")) return "sosmed";
   if (j.includes("utama")) return "utama";
 
-  if (norm(p.nama_lengkap).includes("rania")) return "sosmed";
   const tim = norm(p.team?.nama);
   if (tim.includes("sosmed")) return "sosmed";
-  if (tim.includes("utama") || tim === "tim 1") return "utama";
+  if (tim.includes("utama") || /^tim\s*1$/.test(tim)) return "utama";
   return "cs";
+}
+
+/**
+ * Admin sosmed bersifat READ-ONLY: boleh melihat data seluruh tim,
+ * tidak boleh menambah atau mengubah apa pun (revisi client 3 Nov 2026).
+ */
+export function hanyaBaca(
+  p: Pick<Profile, "nama_lengkap" | "team"> | null | undefined
+): boolean {
+  return Boolean(p) && jenisAdmin(p as Pick<Profile, "nama_lengkap" | "team">) === "sosmed";
 }
 
 /**
