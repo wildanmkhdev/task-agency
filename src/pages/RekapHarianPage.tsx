@@ -257,7 +257,7 @@ export function RekapHarianPage() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {daftarAdmin.map(({ admin, jumlah, pendapatan, gabungan }) => {
+            {daftarAdmin.map(({ admin, pendapatan }) => {
               const nama = namaLengkapAdmin(admin);
               return (
                 <button
@@ -280,21 +280,10 @@ export function RekapHarianPage() {
                     <p className="mt-0.5 line-clamp-1 text-[11px] text-text-muted">
                       {keteranganJabatan(admin)}
                     </p>
-                    {admin.no_hp && (
-                      <p className="mt-0.5 text-[11px] text-text-muted">{admin.no_hp}</p>
-                    )}
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-extrabold text-gold-soft tabular">
                       {rupiah(pendapatan)}
-                    </p>
-                    <p className="text-[11px] text-text-muted">
-                      {jumlah} Transaksi
-                      {gabungan && (
-                        <span className="ml-1.5 rounded-full border border-fuchsia-400/25 bg-fuchsia-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-fuchsia-300">
-                          semua tim
-                        </span>
-                      )}
                     </p>
                   </div>
                   <svg
