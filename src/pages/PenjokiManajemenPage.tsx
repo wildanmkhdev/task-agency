@@ -41,7 +41,7 @@ type Tab = "penjoki" | "admin";
  * - Akun penjoki nanti hanya untuk melihat rate.
  */
 export function PenjokiManajemenPage() {
-  const { profile, isOwner, teams, teamFilter, setTeamFilter, scopedTeamId, applyScope } =
+  const { profile, isOwner, teams, teamFilter, setTeamFilter } =
     useScope();
   /** Penjoki CRUD khusus owner, semua admin read-only (revisi 3 Nov 2026). */
   const readOnly = !isOwner;
@@ -71,12 +71,14 @@ export function PenjokiManajemenPage() {
   const [hapusError, setHapusError] = useState<string | null>(null);
 
   // ---- Data ----
+  // Admin bisa lihat semua tim (read-only), owner bisa edit semua
   const { data: penjoki, isLoading } = useQuery({
-    queryKey: ["penjoki-manajemen", scopedTeamId],
+    queryKey: ["penjoki-manajemen"],
     queryFn: async (): Promise<PenjokiRow[]> => {
-      let q = supabase.from("penjoki").select("*, team:teams(nama)").order("nama");
-      q = applyScope(q as never) as typeof q;
-      const { data, error } = await q;
+      const { data, error } = await supabase
+        .from("penjoki")
+        .select("*, team:teams(nama)")
+        .order("nama");
       if (error) throw error;
       return data ?? [];
     },
@@ -195,7 +197,7 @@ export function PenjokiManajemenPage() {
   const bukaTambah = () => {
     resetForm();
     setShowForm(true);
-    setFTim(scopedTeamId ?? teams[0]?.id ?? "");
+    setFTim(isOwner ? teams[0]?.id ?? "" : profile?.team_id ?? "");
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
