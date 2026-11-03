@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
-import { useAuth } from "../context/AuthContext";
 import { awalBulanIni, yyyyMmDd } from "../lib/format";
 import type { Penjoki as PenjokiRow, Profile } from "../lib/types";
 import {
@@ -46,7 +45,6 @@ type Tab = "penjoki" | "admin";
 export function PenjokiManajemenPage() {
   const { profile, isOwner, teams, teamFilter, setTeamFilter, scopedTeamId, applyScope } =
     useScope();
-  const { profile: me } = useAuth();
   /** Admin sosmed hanya boleh melihat data (revisi 3 Nov 2026). */
   const readOnly = hanyaBaca(profile);
   const qc = useQueryClient();
@@ -127,7 +125,6 @@ export function PenjokiManajemenPage() {
     },
   });
 
-  // Daftar admin (owner = semua, admin = dirinya sendiri via RLS)
   const { data: admins } = useQuery({
     queryKey: ["admins-data-tim"],
     queryFn: async (): Promise<Profile[]> => {
@@ -165,10 +162,10 @@ export function PenjokiManajemenPage() {
 
   const editing = semuaPenjoki.find((p) => p.id === editingId) ?? null;
 
+  // Semua authenticated user bisa melihat semua admin (sesuai RLS policy)
   const daftarAdmin = useMemo(() => {
-    const base = urutkanAdmin(admins ?? []);
-    return isOwner ? base : base.filter((a) => a.id === me?.id);
-  }, [admins, isOwner, me?.id]);
+    return urutkanAdmin(admins ?? []);
+  }, [admins]);
 
   const list = semuaPenjoki.filter((p) => {
     if (cari && !p.nama.toLowerCase().includes(cari.toLowerCase())) return false;
