@@ -1,5 +1,15 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Bar } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
 import { rupiah, yyyyMmDd } from "../lib/format";
@@ -16,6 +26,8 @@ import {
   ChartPieIcon,
   StarIcon,
 } from "../components/icons";
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 type Metrik = "transaksi" | "pendapatan" | "rate";
 
@@ -70,11 +82,7 @@ function DeltaPoin({ value }: { value: number | null }) {
  * pendapatan, dan rata-rata rate penjoki — plus ringkasan total agency
  * beserta perubahan terhadap bulan sebelumnya.
  *
- * Sumber angka:
- * - Transaksi & pendapatan: `pesanan` yang masuk rekap (SELESAI + LUNAS),
- *   aturan yang sama dengan halaman Data Rekap Harian Tim.
- * - Rate: rumus `hitungRate` (70% ulasan + 30% volume tugas bulan berjalan).
- *   Penjoki yang belum punya data tidak ikut dirata-rata.
+ * Chart menggunakan Chart.js (horizontal bar) dengan warna berbeda per tim.
  */
 export function StatistikTimPage() {
   const { teams } = useScope();
@@ -140,20 +148,13 @@ export function StatistikTimPage() {
 
   const { tim: daftarTim, total, delta } = statistik;
 
-  /** Nilai numerik untuk panjang batang metrik terpilih. */
+  /** Nilai numerik untuk chart metrik terpilih. */
   const nilaiMetrik = (t: (typeof daftarTim)[number]): number => {
     if (metrik === "transaksi") return t.transaksi;
     if (metrik === "pendapatan") return t.pendapatan;
     return t.rate ?? 0;
   };
 
-  const formatMetrik = (t: (typeof daftarTim)[number]): string => {
-    if (metrik === "transaksi") return `${t.transaksi} transaksi`;
-    if (metrik === "pendapatan") return rupiah(t.pendapatan);
-    return t.rate === null ? "Belum ada data" : `${Math.round(t.rate)}%`;
-  };
-
-  const nilaiMaks = Math.max(...daftarTim.map(nilaiMetrik), 1);
   const judulChart =
     metrik === "transaksi"
       ? `Transaksi Selesai per Tim (${rentang.label})`
@@ -161,12 +162,103 @@ export function StatistikTimPage() {
         ? `Pendapatan per Tim (${rentang.label})`
         : `Rata-rata Rate per Tim (${rentang.label})`;
 
-  const gradien =
-    metrik === "pendapatan"
-      ? "from-[#cfa84f] via-[#e0bd68] to-[#e9ca7d]"
-      : metrik === "rate"
-        ? "from-emerald-600 via-emerald-400 to-emerald-300"
-        : "from-brand/80 via-brand to-gold";
+  // Warna berbeda per tim (vibrant & kontras dengan bg gelap)
+  const warnaTim = [
+    "rgba(251, 191, 36, 0.8)",  // amber
+    "rgba(52, 211, 153, 0.8)",  // emerald
+    "rgba(96, 165, 250, 0.8)",  // blue
+    "rgba(244, 114, 182, 0.8)", // pink
+    "rgba(167, 139, 250, 0.8)", // violet
+    "rgba(248, 113, 113, 0.8)", // red
+  ];
+
+  const chartData = {
+    labels: daftarTim.map((t) => t.nama),
+    datasets: [
+      {
+        label:
+          metrik === "transaksi"
+            ? "Transaksi"
+            : metrik === "pendapatan"
+              ? "Pendapatan"
+              : "Rate (%)",
+        data: daftarTim.map(nilaiMetrik),
+        backgroundColor: daftarTim.map((_, i) => warnaTim[i % warnaTim.length]),
+        borderColor: daftarTim.map((_, i) =>
+          warnaTim[i % warnaTim.length].replace("0.8", "1")
+        ),
+        borderWidth: 1,
+        borderRadius: 6,
+      },
+    ],
+  };
+
+  const chartOptions = {
+    indexAxis: "y" as const,
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      title: {
+        display: false,
+      },
+      tooltip: {
+        backgroundColor: "rgba(15, 42, 32, 0.95)",
+        titleColor: "#f4efe2",
+        bodyColor: "#f4efe2",
+        borderColor: "rgba(217, 180, 95, 0.34)",
+        borderWidth: 1,
+        padding: 12,
+        displayColors: true,
+        callbacks: {
+          label: (context: any) => {
+            const value = context.parsed.x;
+            if (metrik === "pendapatan") return rupiah(value);
+            if (metrik === "rate") return `${Math.round(value)}%`;
+            return `${value} transaksi`;
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        beginAtZero: true,
+        grid: {
+          color: "rgba(21, 84, 70, 0.3)",
+        },
+        ticks: {
+          color: "#93b5a6",
+          font: {
+            size: 11,
+          },
+          callback: (value: any) => {
+            if (metrik === "pendapatan") {
+              return value >= 1000000
+                ? `${(value / 1000000).toFixed(1)}jt`
+                : value >= 1000
+                  ? `${(value / 1000).toFixed(0)}rb`
+                  : value;
+            }
+            return value;
+          },
+        },
+      },
+      y: {
+        grid: {
+          display: false,
+        },
+        ticks: {
+          color: "#f4efe2",
+          font: {
+            size: 12,
+            weight: "bold" as const,
+          },
+        },
+      },
+    },
+  };
 
   return (
     <div className="space-y-4">
@@ -234,7 +326,7 @@ export function StatistikTimPage() {
         ))}
       </div>
 
-      {/* Chart batang per tim */}
+      {/* Chart batang horizontal (Chart.js) */}
       <Card className="p-4 sm:p-5">
         <div className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-brand-border bg-brand/15 text-gold">
@@ -251,31 +343,8 @@ export function StatistikTimPage() {
             hint="Data tim akan tampil setelah tim dibuat."
           />
         ) : (
-          <div className="mt-4 space-y-3">
-            {daftarTim.map((t) => {
-              const nilai = nilaiMetrik(t);
-              const lebar = Math.max(0, Math.min(100, (nilai / nilaiMaks) * 100));
-              return (
-                <div key={t.id}>
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-[11px] font-bold text-text-main">
-                      {t.nama}
-                    </span>
-                    <span className="text-[11px] font-extrabold tabular text-gold-soft">
-                      {formatMetrik(t)}
-                    </span>
-                  </div>
-                  <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-surface-3">
-                    <div
-                      className={`h-full rounded-full bg-gradient-to-r ${gradien}`}
-                      style={{ width: `${lebar}%` }}
-                      role="img"
-                      aria-label={`${t.nama}: ${formatMetrik(t)}`}
-                    />
-                  </div>
-                </div>
-              );
-            })}
+          <div className="mt-4" style={{ height: `${Math.max(200, daftarTim.length * 60)}px` }}>
+            <Bar data={chartData} options={chartOptions} />
           </div>
         )}
 

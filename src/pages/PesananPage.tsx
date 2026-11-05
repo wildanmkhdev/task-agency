@@ -1,31 +1,28 @@
-import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
 import { useAuth } from "../context/AuthContext";
 import { hanyaBaca } from "../lib/admin";
 import { rupiah, tanggalPendek } from "../lib/format";
-import type { Pesanan, PesananStatus } from "../lib/types";
+import type { Pesanan } from "../lib/types";
 import { hitungFee } from "../lib/fee";
 import { ExportButtons, type ExportColumn } from "../components/ExportButtons";
 import { Button, Card, EmptyState, Spinner, StatusBadge, TeamTabs } from "../components/ui";
 
+import { timTampil } from "../lib/teams";
+
 const PESANAN_SELECT =
   "id, kode, harga, fee_admin, fee_owner, fee_penjoki, status, status_bayar, tanggal, jumlah_keterangan, team_id, customer:customers(nama), penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama), team:teams(nama)";
 
-const FILTERS: { key: "SEMUA" | PesananStatus; label: string }[] = [
-  { key: "SEMUA", label: "Semua" },
-  { key: "MENUNGU", label: "Menunggu" },
-  { key: "DIKERJAKAN", label: "Dikerjakan" },
-  { key: "SELESAI", label: "Selesai" },
-];
-
-/** Daftar Transaksi + kendali lifecycle (scoping via RLS). */
+/**
+ * Daftar Transaksi (revisi 5 Nov 2026).
+ * Filter status dihapus — semua data yang masuk sudah pasti selesai.
+ * Filter per Tim tetap ada untuk Owner/Sosmed.
+ */
 export function PesananPage() {
   const { isOwner, teams, teamFilter, setTeamFilter, applyScope } = useScope();
   const { profile } = useAuth();
   const readOnly = hanyaBaca(profile);
-  const [statusFilter, setStatusFilter] = useState<"SEMUA" | PesananStatus>("SEMUA");
   const qc = useQueryClient();
 
   const { data: rows, isLoading } = useQuery({
@@ -63,9 +60,7 @@ export function PesananPage() {
     },
   });
 
-  const list = (rows ?? []).filter(
-    (p) => statusFilter === "SEMUA" || p.status === statusFilter
-  );
+  const list = rows ?? [];
 
   const exportColumns: ExportColumn[] = [
     { key: "kode", label: "Kode" },
@@ -98,7 +93,7 @@ export function PesananPage() {
       fee_admin: fee.feeAdmin,
       fee_sosmed: fee.feeSosmed,
       fee_owner: fee.feeOwner,
-      status: FILTERS.find((f) => f.key === p.status)?.label ?? p.status,
+      status: p.status,
     };
   });
 
@@ -106,22 +101,10 @@ export function PesananPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          {FILTERS.map((f) => (
-            <button
-              key={f.key}
-              onClick={() => setStatusFilter(f.key)}
-              className={`shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-bold transition-all ${
-                statusFilter === f.key
-                  ? "border-brand bg-brand text-[#10231a]"
-                  : "border-line bg-surface-2 text-text-secondary hover:border-brand-border"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-display text-xl font-extrabold text-text-main">
+          Transaksi
+        </h2>
         <ExportButtons
           title="Daftar Transaksi"
           filename="daftar-transaksi"
@@ -131,7 +114,7 @@ export function PesananPage() {
       </div>
 
       {(isOwner || readOnly) && (
-        <TeamTabs teams={teams} value={teamFilter} onChange={setTeamFilter} />
+        <TeamTabs teams={timTampil(teams)} value={teamFilter} onChange={setTeamFilter} />
       )}
 
       <Card className="hidden overflow-hidden sm:block">
