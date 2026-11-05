@@ -113,9 +113,7 @@ export function PesananPage() {
         />
       </div>
 
-      {(isOwner || readOnly) && (
-        <TeamTabs teams={timTampil(teams)} value={teamFilter} onChange={setTeamFilter} />
-      )}
+      <TeamTabs teams={timTampil(teams)} value={teamFilter} onChange={setTeamFilter} />
 
       <Card className="hidden overflow-hidden sm:block">
         {list.length === 0 ? (
