@@ -11,7 +11,6 @@ import type {
   JenisTugas,
   Penjoki,
   PesananStatus,
-  StatusBayar,
   Team,
 } from "../lib/types";
 import { Button, Card, Field, Spinner, inputCls } from "../components/ui";
@@ -37,7 +36,6 @@ export function TambahPesananPage() {
   const [tanggal, setTanggal] = useState<string>(yyyyMmDd(new Date()));
   /** Status awal — sinkron dengan kategori filter di Daftar Pesanan */
   const [fStatus, setFStatus] = useState<PesananStatus>("MENUNGU");
-  const [fBayar, setFBayar] = useState<StatusBayar>("BELUM");
   const [customerMode, setCustomerMode] = useState<"pilih" | "baru">("pilih");
   const [customerId, setCustomerId] = useState("");
   const [custNama, setCustNama] = useState("");
@@ -144,7 +142,8 @@ export function TambahPesananPage() {
         // Tanggal bisa lampau (backfill rekap) — dilihat semua peran dari kolom ini
         tanggal: tanggalIso,
         status: fStatus,
-        status_bayar: fBayar,
+        // Semua transaksi yang masuk sudah dibayar customer → selalu Lunas
+        status_bayar: "LUNAS",
         // Kalau langsung dinyatakan selesai, catat waktu selesai-nya juga
         ...(fStatus === "SELESAI" ? { selesai_at: new Date().toISOString() } : {}),
         dibuat_oleh: profile!.id,
@@ -406,10 +405,8 @@ export function TambahPesananPage() {
             label="Status"
             hint={
               fStatus === "SELESAI"
-                ? "Langsung dicatat selesai. Masuk rekap bila status bayar juga Lunas."
-                : fStatus === "BATAL"
-                  ? "Pesanan batal — tidak masuk rekap."
-                  : "Default: Menunggu. Bisa diubah sewaktu-waktu di Daftar Pesanan."
+                ? "Langsung dicatat selesai dan masuk rekap."
+                : "Default: Menunggu. Bisa diubah sewaktu-waktu di Daftar Transaksi."
             }
           >
             <select
@@ -420,31 +417,13 @@ export function TambahPesananPage() {
               <option value="MENUNGU">Menunggu</option>
               <option value="DIKERJAKAN">Dikerjakan</option>
               <option value="SELESAI">Selesai</option>
-              <option value="BATAL">Batal</option>
             </select>
           </Field>
 
-          {/* Status bayar — menggantikan toggle dibayar + fisk (client 2026-11-02) */}
-          <Field
-            label="Status Bayar"
-            hint={
-              fBayar === "LUNAS"
-                ? "Lunas — bila status Selesai, tugas langsung masuk rekap."
-                : fBayar === "CICIL"
-                  ? "Cicil = bayar sebagian — belum masuk rekap sampai Lunas."
-                  : "Belum bayar — belum masuk rekap. Bisa diubah di Daftar Pesanan."
-            }
-          >
-            <select
-              value={fBayar}
-              onChange={(e) => setFBayar(e.target.value as StatusBayar)}
-              className={inputCls}
-            >
-              <option value="BELUM">Belum Bayar</option>
-              <option value="CICIL">Cicil</option>
-              <option value="LUNAS">Lunas</option>
-            </select>
-          </Field>
+          <p className="rounded-xl border border-sky-400/25 bg-sky-400/10 px-4 py-3 text-[11px] leading-relaxed text-sky-200">
+            Semua transaksi yang diinput di sini otomatis tercatat{" "}
+            <strong className="text-sky-100">sudah dibayar (Lunas)</strong>.
+          </p>
 
           {error && (
             <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm font-semibold text-danger">

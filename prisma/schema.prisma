@@ -107,7 +107,8 @@ model Penjoki {
   noHp   String? @map("no_hp")
   teamId String  @map("team_id") @db.Uuid
   team   Team    @relation(fields: [teamId], references: [id])
-  /// Rating kemampuan dari PDF (0–100, boleh desimal) — METRIK BERBEDA dari Rate Keaktifan
+  /// Rate awal manual 0–100 (dari PDF / input form). Dipakai UI sebagai
+  /// fallback bila penjoki belum punya transaksi pada bulan berjalan.
   ratingSkill Float? @map("rating_skill")
   /// Keahlian (mis. "Laporan PKL", "PPT", "Makalah") — multi-tag
   keahlian String[]

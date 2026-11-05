@@ -5,7 +5,7 @@
 ### 1. RLS Policy - Admin Read All Penjoki
 - Admin bisa SELECT semua penjoki lintas tim (read-only)
 - INSERT/UPDATE tetap dibatasi tim sendiri
-- Migration applied via pooler (port 6543)
+- Policy SELECT diterapkan sebelumnya lewat SQL via pooler (port 6543); keberhasilan `db:deploy` belum terverifikasi.
 
 ### 2. Per-Team CRUD Permissions
 - **Owner**: Edit/hapus semua penjoki
@@ -13,10 +13,11 @@
 - **Sosmed**: Lihat semua, edit none (read-only total)
 
 ### 3. UI Filtering
-- ✅ Sosmed hidden dari filter tim
-- ✅ Admin Tim 1 & Sosmed hidden dari tab Admin
-- ✅ Team filter tabs: Semua, Tim 1-5 (NO Sosmed)
+- Tim 1 dan Sosmed tidak ditampilkan dalam filter penjoki.
+- Tab Admin CS menampilkan seluruh admin, termasuk Tim 1 dan Sosmed, untuk owner maupun admin.
+- Team filter tabs: Semua, Tim 2, Tim 3, Tim 4, Tim 5.
 - ✅ Stats update sesuai filter aktif
+- Kartu Admin CS hanya informasi: tanpa panah, tautan, atau navigasi ke rekap harian.
 
 ### 4. Action Buttons
 - Desktop: Tombol Edit/Hapus/Toggle cuma untuk penjoki di tim admin
@@ -34,12 +35,13 @@ Penjoki:
 - Tim 5: 5 penjoki
 Total: 24 penjoki
 
-Admin (visible di tab Admin):
-- Tim 2: CS
-- Tim 3: CS
-- Tim 4: CS
-- Tim 5: CS
-Hidden: Tim 1 & Sosmed (dikelola sistem lain)
+Admin (tab Admin CS, visible untuk owner dan admin):
+- Tim 1: Dea (Admin Tim Utama)
+- Tim 2: Naim CS
+- Tim 3: Widya CS
+- Tim 4: Vivi CS
+- Tim 5: Annisa CS
+- Sosmed: Rania sosmed (Sekretaris dan Admin Sosmed)
 ```
 
 ## 📋 Test Checklist
@@ -47,21 +49,40 @@ Hidden: Tim 1 & Sosmed (dikelola sistem lain)
 - [ ] Admin Tim 2: lihat semua, edit cuma Tim 2
 - [ ] Admin Tim 3: lihat semua, edit cuma Tim 3
 - [ ] Sosmed: lihat semua, no edit buttons
-- [ ] Filter "Sosmed" tidak muncul
-- [ ] Tab Admin: Tim 1 & Sosmed tidak muncul
+- [x] Filter penjoki hanya Semua dan Tim 2-5; Tim 1 dan Sosmed tidak muncul
+- [x] Tab Admin CS: Tim 1 dan Sosmed tampil sebagai informasi, tanpa navigasi rekap
 - [ ] Stats (Total/Aktif/Nonaktif) update saat filter
 
-## 🔒 RLS Policies Active
+## RLS yang Sudah Ada
 1. `penjoki_select` - authenticated: true (all can read)
 2. `penjoki_insert` - NOT sosmed AND (owner OR team_id = own)
 3. `penjoki_update` - NOT sosmed AND (owner OR team_id = own)
 4. `penjoki_delete` - owner OR team_id = own
 
-## 📁 Files Changed
-- `src/pages/PenjokiManajemenPage.tsx` - CRUD logic + filters
+Perbaikan tab Admin CS tidak mengubah RLS. Izin tulis di atas adalah kontrak migrasi; pengujian mutasi belum dijalankan pada sesi ini.
+
+## Files Terkait
+- `src/pages/PenjokiManajemenPage.tsx` - daftar Admin CS lengkap dan noninteraktif; filter/CRUD penjoki dipertahankan
 - `prisma/migrations/20261103153300_admin_read_all_penjoki/` - RLS policy
 - `.env` - Database pooler connection (port 6543)
 - `TEST-SCENARIO.md` - Test scenarios
 
+## Verifikasi Perbaikan 2026-11-04
+- `pnpm build`: lulus TypeScript dan Vite, 408 modul; warning ukuran bundle tidak menghalangi build.
+- Browser lokal dengan akun owner dan admin Tim 2: keenam admin tampil, tanpa tautan/panah/elemen interaktif pada daftar Admin CS.
+- Klik nama admin tetap pada `/penjoki/manajemen`; tampilan owner desktop dan admin mobile diperiksa dengan screenshot.
+- Browser admin Tim 2: filter Semua dan Tim 2-5 memperbarui statistik Total Penjoki serta baris tabel ke tim yang sesuai, termasuk hasil kosong Tim 2.
+
+
+## Deployment Produksi 2026-11-04
+- Command: `vercel deploy --prod --yes`.
+- Status deployment: `READY`, target `production`.
+- Deployment ID: `dpl_5fZtoHNcK5hMhBZi2tsugXsfZ3ng`.
+- Alias: https://task-agency.vercel.app
+- Inspector: https://vercel.com/wildans-projects-ae50d274/task-agency/5fZtoHNcK5hMhBZi2tsugXsfZ3ng
+- Browser pada alias produksi: owner, admin Tim 2, dan admin Sosmed melihat keenam admin; daftar tanpa tautan/panah, dan klik nama tetap di halaman manajemen.
+- Screenshot produksi owner desktop dan Sosmed mobile tersimpan sementara; tidak ada error runtime tercatat pada pemeriksaan halaman terakhir.
+- Source belum di-commit/push. Jika deployment berikutnya berasal dari GitHub, sertakan perubahan lokal ini agar perbaikan tidak tertimpa.
+
 ## ⚡ Network Fix
-Port 5432 blocked → switched to pooler port 6543 (aws-0-ap-southeast-1.pooler.supabase.com)
+Pada sesi sebelumnya, host database direct ter-resolve ke IPv6 dan gagal dengan `Network is unreachable`; koneksi pooler port 6543 berhasil. Pemblokiran port 5432 oleh firewall tidak terbukti.

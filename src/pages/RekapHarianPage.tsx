@@ -107,13 +107,21 @@ export function RekapHarianPage() {
   const rekap = (rowsPeriode ?? []).filter(masukRekap);
   const rekapSebelumnya = (rowsSebelumnya ?? []).filter(masukRekap);
 
-  // Semua admin lihat total pendapatan semua transaksi (sama seperti owner/sosmed).
-  const lihatSemua = true;
-  const dalamScope = (rows: Pesanan[]) =>
-    lihatSemua ? rows : rows.filter((p) => p.dibuat_oleh === profile?.id);
-
-  const rekapScope = dalamScope(rekap);
-  const rekapScopeSebelumnya = dalamScope(rekapSebelumnya);
+  /**
+   * Total di halaman ini sengaja LINTAS ADMIN, bukan per ruangan.
+   *
+   * Dasar kebijakan (revisi client 3 Nov 2026):
+   *   prisma/migrations/20261103105500_admin_lihat_semua
+   *   prisma/migrations/20261103111700_simplify_select_policy
+   * memberi policy SELECT `pesanan` USING (true), dan admin memang boleh
+   * membuka ruangan admin lain (read-only). Angka di sini karena itu harus
+   * sama dengan jumlah baris "Rekap per Admin" di bawahnya.
+   *
+   * Sebelumnya scoping dimatikan lewat flag `lihatSemua = true`; sekarang
+   * ditulis eksplisit supaya tidak terbaca sebagai sisa kode demo.
+   */
+  const rekapScope = rekap;
+  const rekapScopeSebelumnya = rekapSebelumnya;
 
   const totalPendapatan = rekapScope.reduce((s, p) => s + p.harga, 0);
   const totalPendapatanSebelumnya = rekapScopeSebelumnya.reduce((s, p) => s + p.harga, 0);
@@ -222,7 +230,7 @@ export function RekapHarianPage() {
               </svg>
             </span>
             <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-[11px]">
-              Total Tugas Selesai
+              Total Transaksi Selesai
             </p>
           </div>
           <p className="mt-3 font-display text-xl font-extrabold text-text-main tabular sm:text-2xl">

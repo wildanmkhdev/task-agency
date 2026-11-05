@@ -9,18 +9,20 @@ import {
   Button,
   Card,
   EmptyState,
-  RateBadge,
+  RateBar,
   Spinner,
+  StatusKinerjaBadge,
   TeamTabs,
   inputCls,
 } from "../components/ui";
+import { KETERANGAN_RATE, belumAdaData, hitungRate } from "../lib/rate";
+import { adaDiTimTampil, timTampil } from "../lib/teams";
 import { MagnifyingGlassIcon } from "../components/icons";
 
 /**
  * Laporan rate keaktifan penjoki (tampilan-saja).
  * CRUD penuh ada di menu "Data Penjoki dan Admin" (/penjoki/manajemen).
- * RATE_PROVISIONAL: formula sementara = tugas selesai + lunas
- * dibanding total pesanan bulan berjalan. Formula final menunggu keputusan D6.
+ * Rate = 70% ulasan (rating_skill) + 30% volume tugas bulan berjalan.
  */
 export function PenjokiPage() {
   const { isOwner, teams, teamFilter, setTeamFilter, applyScope } = useScope();
@@ -65,25 +67,46 @@ export function PenjokiPage() {
     return m;
   }, [pesananBulanIni]);
 
-  const rateOf = (id: string): number | null => {
-    const s = rateMap.get(id);
-    if (!s || s.total === 0) return null;
-    return Math.round((s.selesai / s.total) * 100);
-  };
+  /** Nama admin per tim untuk label "Tim 2 · Naim CS" seperti mockup. */
+  const { data: adminTim } = useQuery({
+    queryKey: ["admin-per-tim"],
+    queryFn: async (): Promise<Map<string, string>> => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("nama_lengkap, team_id, role")
+        .eq("role", "ADMIN");
+      if (error) return new Map();
+      const m = new Map<string, string>();
+      for (const a of data ?? []) {
+        if (a.team_id && !m.has(a.team_id)) m.set(a.team_id, a.nama_lengkap);
+      }
+      return m;
+    },
+  });
+
+  /** Rate gabungan: ulasan (rating_skill) + volume tugas bulan berjalan. */
+  const rateOf = (p: PenjokiRow): number =>
+    hitungRate(p.rating_skill, rateMap.get(p.id)?.total ?? 0);
+
+  // Belum dinilai & belum pernah ditugaskan → tampilkan status netral.
+  const kosongOf = (p: PenjokiRow): boolean =>
+    belumAdaData(p.rating_skill, rateMap.get(p.id)?.total ?? 0);
 
   if (isLoading) return <Spinner />;
 
-  const list = (penjoki ?? []).filter((p) =>
-    cari ? p.nama.toLowerCase().includes(cari.toLowerCase()) : true
-  );
+  // Tim 1 & Sosmed tidak tampil — aturan sama dengan halaman manajemen.
+  const list = (penjoki ?? [])
+    .filter(adaDiTimTampil)
+    .filter((p) =>
+      cari ? p.nama.toLowerCase().includes(cari.toLowerCase()) : true
+    );
 
   return (
     <div className="space-y-4">
       <p className="rounded-2xl border border-brand-border/50 bg-brand/5 px-4 py-3 text-[11px] leading-relaxed text-text-secondary">
-        Laporan kinerja penjoki: daftar penjoki, tim, dan tingkat keaktifannya.{" "}
-        <strong className="text-text-main">Rate</strong> dihitung dari tugas yang
-        selesai + lunas pada bulan berjalan. Untuk mengubah data penjoki, buka
-        menu <strong className="text-text-main">Data Penjoki dan Admin</strong>
+        Laporan kinerja penjoki: daftar penjoki, tim, dan tingkat keaktifannya.
+        Untuk mengubah data penjoki, buka menu{" "}
+        <strong className="text-text-main">Data Penjoki dan Admin</strong>
         {!isOwner && " (terkunci ke tim Anda)"}.
       </p>
 
@@ -106,7 +129,13 @@ export function PenjokiPage() {
         </Button>
       </div>
 
-      {isOwner && <TeamTabs teams={teams} value={teamFilter} onChange={setTeamFilter} />}
+      {isOwner && (
+        <TeamTabs
+          teams={timTampil(teams)}
+          value={teamFilter}
+          onChange={setTeamFilter}
+        />
+      )}
 
       {/* Kartu penjoki (mobile) */}
       <div className="space-y-2 sm:hidden">
@@ -131,8 +160,13 @@ export function PenjokiPage() {
                       {p.nama}
                     </p>
                     <p className="truncate text-[11px] text-text-muted">
+                      {p.no_hp || "Nomor belum diisi"}
+                    </p>
+                    <p className="truncate text-[11px] text-text-muted">
                       {p.team?.nama ?? "-"}
-                      {p.no_hp ? ` · ${p.no_hp}` : ""}
+                      {adminTim?.get(p.team_id)
+                        ? ` · ${adminTim.get(p.team_id)}`
+                        : ""}
                     </p>
                   </div>
                   <span
@@ -142,7 +176,7 @@ export function PenjokiPage() {
                         : "border-red-400/25 bg-red-400/10 text-danger"
                     }`}
                   >
-                    {p.aktif ? "Aktif" : "Nonaktif"}
+                    {p.aktif ? "Akun aktif" : "Akun nonaktif"}
                   </span>
                 </div>
 
@@ -159,11 +193,25 @@ export function PenjokiPage() {
                   </div>
                 )}
 
-                <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-line-soft pt-2.5">
+                <div className="mt-2.5 space-y-2 border-t border-line-soft pt-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {kosongOf(p) ? (
+                        <span className="text-[15px] font-extrabold text-text-muted">—</span>
+                      ) : (
+                        <>
+                          <span className="text-[15px] font-extrabold tabular-nums text-text-main">
+                            {rateOf(p)}%
+                          </span>
+                          <RateBar rate={rateOf(p)} className="w-24" />
+                        </>
+                      )}
+                    </div>
+                    <StatusKinerjaBadge rate={rateOf(p)} kosong={kosongOf(p)} />
+                  </div>
                   <p className="text-[10px] text-text-muted">
-                    Tugas {stat ? `${stat.selesai}/${stat.total}` : "0"}
+                    Tugas {stat ? `${stat.selesai}/${stat.total}` : "0"} bulan ini
                   </p>
-                  <RateBadge rate={rateOf(p.id)} />
                 </div>
               </div>
             );
@@ -181,17 +229,15 @@ export function PenjokiPage() {
               <thead>
                 <tr className="border-b border-line bg-surface-2/60 text-left text-[10px] uppercase tracking-wider text-text-muted">
                   <th className="px-5 py-3 font-bold">Nama Penjoki</th>
-                  {isOwner && <th className="px-5 py-3 font-bold">Tim</th>}
-                  <th className="px-5 py-3 font-bold">Keahlian</th>
-                  <th className="px-5 py-3 text-center font-bold">Tugas (bln ini)</th>
-                  <th className="px-5 py-3 text-center font-bold">Rate</th>
+                  <th className="px-5 py-3 font-bold">Tim</th>
+                  <th className="px-5 py-3 font-bold">Rate</th>
                   <th className="px-5 py-3 font-bold">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {list.map((p) => {
                   const stat = rateMap.get(p.id);
-                  const rate = rateOf(p.id);
+                  const rate = rateOf(p);
                   return (
                     <tr key={p.id} className="border-b border-line-soft last:border-0 hover:bg-surface-2/50">
                       <td className="px-5 py-3">
@@ -204,42 +250,41 @@ export function PenjokiPage() {
                             {p.no_hp && (
                               <p className="text-xs text-text-muted">{p.no_hp}</p>
                             )}
+                            {!p.aktif && (
+                              <span className="mt-1 inline-flex rounded-md border border-rose-400/25 bg-rose-400/10 px-1.5 py-0.5 text-[10px] font-bold text-rose-300">
+                                Akun nonaktif
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>
-                      {isOwner && (
-                        <td className="whitespace-nowrap px-5 py-3 text-xs font-bold text-text-secondary">
+                      <td className="whitespace-nowrap px-5 py-3">
+                        <p className="text-xs font-bold text-text-main">
                           {p.team?.nama ?? "-"}
-                        </td>
-                      )}
-                      <td className="px-5 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {(p.keahlian ?? []).slice(0, 3).map((k) => (
-                            <span
-                              key={k}
-                              className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-text-secondary"
-                            >
-                              {k}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-5 py-3 text-center tabular-nums">
-                        {stat ? `${stat.selesai}/${stat.total}` : "0"}
-                      </td>
-                      <td className="px-5 py-3 text-center">
-                        <RateBadge rate={rate} />
+                        </p>
+                        {adminTim?.get(p.team_id) && (
+                          <p className="text-[11px] text-text-muted">
+                            {adminTim.get(p.team_id)}
+                          </p>
+                        )}
                       </td>
                       <td className="px-5 py-3">
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${
-                            p.aktif
-                              ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
-                              : "border-red-400/25 bg-red-400/10 text-danger"
-                          }`}
-                        >
-                          {p.aktif ? "Aktif" : "Nonaktif"}
-                        </span>
+                        {kosongOf(p) ? (
+                          <p className="text-[15px] font-extrabold text-text-muted">—</p>
+                        ) : (
+                          <>
+                            <p className="text-[15px] font-extrabold tabular-nums text-text-main">
+                              {rate}%
+                            </p>
+                            <RateBar rate={rate} className="mt-1.5 w-24" />
+                          </>
+                        )}
+                        <p className="mt-1 text-[10px] text-text-muted">
+                          Tugas {stat ? `${stat.selesai}/${stat.total}` : "0"} bulan ini
+                        </p>
+                      </td>
+                      <td className="px-5 py-3">
+                        <StatusKinerjaBadge rate={rate} kosong={kosongOf(p)} />
                       </td>
                     </tr>
                   );
@@ -250,10 +295,17 @@ export function PenjokiPage() {
         )}
       </Card>
 
-      <p className="text-[10px] leading-relaxed text-text-muted">
-        💡 Penjoki dengan rate tinggi bisa dipertimbangkan untuk membantu tim yang
-        kekurangan tenaga (rekomendasi antar tim — pengembangan Fase 4).
-      </p>
+      {/* Panel info formula (mengikuti mockup "ui rate") */}
+      <div className="flex items-start gap-2.5 rounded-xl border border-sky-400/25 bg-sky-400/10 px-4 py-3 text-[11px] leading-relaxed text-sky-200">
+        <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-sky-400/40 text-[9px] font-extrabold">
+          i
+        </span>
+        <p>
+          {KETERANGAN_RATE} Bobot: 70% rating ulasan + 30% volume tugas (8
+          tugas/bulan = penuh). Tugas batal tidak dihitung. Penjoki dengan rate
+          tinggi bisa dipertimbangkan membantu tim yang kekurangan tenaga.
+        </p>
+      </div>
     </div>
   );
 }

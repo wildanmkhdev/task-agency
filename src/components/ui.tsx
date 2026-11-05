@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { PesananStatus } from "../lib/types";
+import { gayaStatus } from "../lib/rate";
 
 /** Kartu KPI — hijau gelap bertingkat + aksen emas (mockup JOKITUGASAJA_ID) */
 export function StatCard({
@@ -87,6 +88,68 @@ export function RateBadge({ rate }: { rate: number | null }) {
       className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${cls}`}
     >
       {rate}%
+    </span>
+  );
+}
+
+/** Bar rate dengan warna mengikuti status kinerja. */
+/** Bar rate tipis dengan tick marks + titik di ujung, mengikuti mockup "ui rate". */
+export function RateBar({ rate, className = "" }: { rate: number; className?: string }) {
+  const width = Math.max(0, Math.min(100, rate));
+  const g = gayaStatus(width);
+  return (
+    <div
+      className={`relative h-1.5 w-20 overflow-hidden rounded-full bg-surface-3 ${className}`}
+    >
+      <div
+        className={`h-full rounded-full bg-gradient-to-r ${g.bar}`}
+        style={{ width: `${width}%` }}
+      />
+      {/* tick marks tiap 10% */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(90deg, transparent 0, transparent calc(10% - 1px), rgba(255,255,255,0.18) calc(10% - 1px), rgba(255,255,255,0.18) 10%)",
+        }}
+      />
+      {width > 0 && (
+        <span
+          aria-hidden
+          className={`absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-surface ${g.dot}`}
+          style={{ left: `${width}%` }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Badge status kinerja: Sangat Aktif / Aktif / Cukup Aktif / Kurang Aktif / Perlu Perhatian.
+ * `kosong` dipakai bila penjoki belum punya data sama sekali — jangan menilai
+ * yang belum diukur.
+ */
+export function StatusKinerjaBadge({
+  rate,
+  kosong = false,
+}: {
+  rate: number;
+  kosong?: boolean;
+}) {
+  if (kosong) {
+    return (
+      <span className="inline-flex items-center whitespace-nowrap rounded-lg border border-line bg-surface-2 px-2.5 py-1 text-[11px] font-bold text-text-muted">
+        Belum ada data
+      </span>
+    );
+  }
+  const g = gayaStatus(rate);
+  return (
+    <span
+      className={`inline-flex items-center whitespace-nowrap rounded-lg border px-2.5 py-1 text-[11px] font-bold ${g.badge}`}
+    >
+      {g.label}
     </span>
   );
 }

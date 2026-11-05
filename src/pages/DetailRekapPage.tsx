@@ -534,16 +534,13 @@ export function DetailRekapPage() {
       {/* Kotak ringkasan */}
       {sosmed ? (
         <div className="grid grid-cols-2 gap-3">
-          <Kotak label="Total Transaksi" value={String(rekap.length)} icon="#" tone="green" delta={deltaTransaksi} />
           <Kotak label="Total Pendapatan" value={rupiah(totalPendapatan)} icon="Rp" tone="gold" delta={deltaPendapatan} />
-          <div className="col-span-2">
-            <Kotak
-              label={`Fee Admin Sosmed (${persen(BAGI_HASIL.adminSosmed)}%)`}
-              value={rupiah(fee.adminSosmed)}
-              icon="%"
-              tone="violet"
-            />
-          </div>
+          <Kotak
+            label={`Fee Admin Sosmed (${persen(BAGI_HASIL.adminSosmed)}%)`}
+            value={rupiah(fee.adminSosmed)}
+            icon="%"
+            tone="violet"
+          />
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
@@ -576,7 +573,8 @@ export function DetailRekapPage() {
         </div>
       )}
 
-      {/* Rincian transaksi */}
+      {/* Rincian transaksi — admin sosmed tidak merekap, jadi bagian ini tidak ditampilkan */}
+      {!sosmed && (
       <Card className="overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
           <div className="min-w-0">
@@ -680,6 +678,7 @@ export function DetailRekapPage() {
           </div>
         )}
       </Card>
+      )}
 
       {bolehTambah && (
         <TambahTransaksiModal

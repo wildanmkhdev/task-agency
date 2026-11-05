@@ -11,7 +11,11 @@
     "db:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
-    "db:seed:auth": "tsx scripts/seed-auth.ts"
+    "db:sync-penjoki": "tsx scripts/sync-penjoki.ts",
+    "db:seed:auth": "tsx scripts/seed-auth.ts",
+    "check": "tsc -b && tsx scripts/check-rate.ts && tsx scripts/check-statistik.ts",
+    "check:rate": "tsx scripts/check-rate.ts",
+    "check:statistik": "tsx scripts/check-statistik.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",

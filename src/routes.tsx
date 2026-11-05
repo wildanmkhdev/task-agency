@@ -12,6 +12,7 @@ import { PesananPage } from "./pages/PesananPage";
 import { TambahPesananPage } from "./pages/TambahPesananPage";
 import { PenjokiPage } from "./pages/PenjokiPage";
 import { PenjokiManajemenPage } from "./pages/PenjokiManajemenPage";
+import { StatistikTimPage } from "./pages/StatistikTimPage";
 import { PengaturanPage } from "./pages/PengaturanPage";
 import { JadwalSetorPage } from "./pages/JadwalSetorPage";
 import { NotifikasiPage } from "./pages/NotifikasiPage";
@@ -56,6 +57,7 @@ export const router = createBrowserRouter([
       { path: "/pesanan/baru", element: <RequireTulis><TambahPesananPage /></RequireTulis> },
       { path: "/penjoki", element: <PenjokiPage /> },
       { path: "/penjoki/manajemen", element: <PenjokiManajemenPage /> },
+      { path: "/statistik", element: <StatistikTimPage /> },
       { path: "/jadwal", element: <JadwalSetorPage /> },
       { path: "/notifikasi", element: <NotifikasiPage /> },
       { path: "/pengaturan", element: <PengaturanPage /> },

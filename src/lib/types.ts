@@ -38,6 +38,8 @@ export interface Penjoki {
   nama: string;
   no_hp: string | null;
   team_id: string;
+  /** Rate awal manual (0–100). Dipakai bila belum ada transaksi bulan berjalan. */
+  rating_skill: number | null;
   keahlian: string[] | null;
   keterangan: string | null;
   aktif: boolean;

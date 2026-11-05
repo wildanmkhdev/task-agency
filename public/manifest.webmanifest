@@ -1,0 +1,33 @@
+{
+  "name": "JokiTugasAja_ID — Dashboard Admin",
+  "short_name": "JokiTugas",
+  "description": "Dashboard manajemen agency JokiTugasAja_ID — rekap harian, transaksi, penjoki, dan laporan.",
+  "lang": "id",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#021f1a",
+  "theme_color": "#021f1a",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

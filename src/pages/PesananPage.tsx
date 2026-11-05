@@ -5,7 +5,7 @@ import { useScope } from "../hooks/useScope";
 import { useAuth } from "../context/AuthContext";
 import { hanyaBaca } from "../lib/admin";
 import { rupiah, tanggalPendek } from "../lib/format";
-import type { Pesanan, PesananStatus, StatusBayar } from "../lib/types";
+import type { Pesanan, PesananStatus } from "../lib/types";
 import { hitungFee } from "../lib/fee";
 import { ExportButtons, type ExportColumn } from "../components/ExportButtons";
 import { Button, Card, EmptyState, Spinner, StatusBadge, TeamTabs } from "../components/ui";
@@ -18,24 +18,7 @@ const FILTERS: { key: "SEMUA" | PesananStatus; label: string }[] = [
   { key: "MENUNGU", label: "Menunggu" },
   { key: "DIKERJAKAN", label: "Dikerjakan" },
   { key: "SELESAI", label: "Selesai" },
-  { key: "BATAL", label: "Batal" },
 ];
-
-const OpsiBayar: { value: StatusBayar; label: string }[] = [
-  { value: "BELUM", label: "Belum Bayar" },
-  { value: "CICIL", label: "Cicil" },
-  { value: "LUNAS", label: "Lunas" },
-];
-
-const warnaBayar = (s: StatusBayar) =>
-  s === "LUNAS"
-    ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
-    : s === "CICIL"
-      ? "border-amber-400/25 bg-amber-400/10 text-warning"
-      : "border-red-400/25 bg-red-400/10 text-danger";
-
-const labelBayar = (s: StatusBayar) =>
-  OpsiBayar.find((o) => o.value === s)?.label ?? s;
 
 /** Daftar Transaksi + kendali lifecycle (scoping via RLS). */
 export function PesananPage() {
@@ -66,7 +49,7 @@ export function PesananPage() {
       patch,
     }: {
       id: string;
-      patch: Partial<Pick<Pesanan, "status" | "status_bayar" | "selesai_at">>;
+      patch: Partial<Pick<Pesanan, "status" | "selesai_at">>;
     }) => {
       const { error } = await supabase.from("pesanan").update(patch).eq("id", id);
       if (error) throw error;
@@ -99,7 +82,6 @@ export function PesananPage() {
     { key: "fee_sosmed", label: "Fee Admin Sosmed (7%)", currency: true },
     { key: "fee_owner", label: "Fee Owner (20%)", currency: true },
     { key: "status", label: "Status", render: (r) => String(r.status) },
-    { key: "status_bayar", label: "Status Bayar", render: (r) => String(r.status_bayar) },
   ];
 
   const exportRows = list.map((p) => {
@@ -117,8 +99,6 @@ export function PesananPage() {
       fee_sosmed: fee.feeSosmed,
       fee_owner: fee.feeOwner,
       status: FILTERS.find((f) => f.key === p.status)?.label ?? p.status,
-      status_bayar:
-        OpsiBayar.find((o) => o.value === p.status_bayar)?.label ?? p.status_bayar,
     };
   });
 
@@ -168,7 +148,6 @@ export function PesananPage() {
                   {(isOwner || readOnly) && <th className="px-4 py-3 font-bold">Tim</th>}
                   <th className="px-4 py-3 text-right font-bold">Harga</th>
                   <th className="px-4 py-3 font-bold">Status</th>
-                  {!isOwner && <th className="px-4 py-3 font-bold">Bayar</th>}
                   {!readOnly && <th className="px-4 py-3 text-right font-bold">Aksi</th>}
                 </tr>
               </thead>
@@ -212,46 +191,6 @@ export function PesananPage() {
                       <td className="px-4 py-3">
                         <StatusBadge status={p.status} />
                       </td>
-                      {!isOwner && (
-                        <td className="px-4 py-3">
-                          {readOnly ? (
-                            <span
-                              className={`inline-flex items-center rounded-lg border px-2 py-1 text-xs font-bold ${warnaBayar(p.status_bayar)}`}
-                            >
-                              {labelBayar(p.status_bayar)}
-                            </span>
-                          ) : (
-                            <select
-                            value={p.status_bayar}
-                            onChange={(e) =>
-                              update.mutate({
-                                id: p.id,
-                                patch: { status_bayar: e.target.value as StatusBayar },
-                              })
-                            }
-                            className={`rounded-lg border px-2 py-1 text-xs font-bold outline-none transition-colors ${warnaBayar(
-                              p.status_bayar
-                            )}`}
-                            title={
-                              p.status === "SELESAI" && p.status_bayar !== "LUNAS"
-                                ? "Selesai tapi belum lunas — belum masuk rekap"
-                                : "Status pembayaran customer"
-                            }
-                          >
-                            {OpsiBayar.map((o) => (
-                              <option key={o.value} value={o.value}>
-                                {o.label}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                        {!readOnly && p.status === "SELESAI" && p.status_bayar !== "LUNAS" && (
-                          <p className="mt-1 text-[10px] font-semibold text-warning">
-                            belum masuk rekap
-                          </p>
-                        )}
-                      </td>
-                      )}
                       {!readOnly && (
                         <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-1.5">
@@ -268,7 +207,7 @@ export function PesananPage() {
                           {!readOnly && p.status === "DIKERJAKAN" && (
                             <Button
                               variant="success"
-                              title="Tandai selesai (masuk rekap bila sudah Lunas)"
+                              title="Tandai selesai (masuk rekap)"
                               onClick={() =>
                                 update.mutate({
                                   id: p.id,
@@ -280,16 +219,6 @@ export function PesananPage() {
                               }
                             >
                               Selesai
-                            </Button>
-                          )}
-                          {!readOnly && (p.status === "MENUNGU" || p.status === "DIKERJAKAN") && (
-                            <Button
-                              variant="danger"
-                              onClick={() =>
-                                update.mutate({ id: p.id, patch: { status: "BATAL" } })
-                              }
-                            >
-                              Batal
                             </Button>
                           )}
                         </div>
@@ -358,34 +287,6 @@ export function PesananPage() {
                       Sosmed {rupiah(fee.feeSosmed)} · Owner {rupiah(fee.feeOwner)}
                     </p>
                   </div>
-                  {readOnly ? (
-                    <span
-                      className={`inline-flex items-center rounded-lg border px-2 py-1 text-[11px] font-bold ${warnaBayar(
-                        p.status_bayar
-                      )}`}
-                    >
-                      {labelBayar(p.status_bayar)}
-                    </span>
-                  ) : (
-                    <select
-                      value={p.status_bayar}
-                      onChange={(e) =>
-                        update.mutate({
-                          id: p.id,
-                          patch: { status_bayar: e.target.value as StatusBayar },
-                        })
-                      }
-                      className={`rounded-lg border px-2 py-1 text-[11px] font-bold outline-none ${warnaBayar(
-                        p.status_bayar
-                      )}`}
-                    >
-                      {OpsiBayar.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  )}
                 </div>
 
                 {!readOnly && (
@@ -413,14 +314,6 @@ export function PesananPage() {
                         }
                       >
                         Selesai
-                      </Button>
-                    )}
-                    {(p.status === "MENUNGU" || p.status === "DIKERJAKAN") && (
-                      <Button
-                        variant="danger"
-                        onClick={() => update.mutate({ id: p.id, patch: { status: "BATAL" } })}
-                      >
-                        Batal
                       </Button>
                     )}
                   </div>

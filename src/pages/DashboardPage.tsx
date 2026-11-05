@@ -26,21 +26,15 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Banner emas */}
-      <Link
-        to="/rekap"
-        className="flex items-center gap-3 rounded-2xl border border-brand-border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent px-4 py-4 transition-colors hover:border-brand"
-      >
+      {/* Banner emas (statis — bukan tautan/tombol) */}
+      <div className="flex items-center gap-3 rounded-2xl border border-brand-border bg-gradient-to-r from-brand/10 via-brand/5 to-transparent px-4 py-4">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-brand-border bg-brand/15 text-base text-gold">
           👑
         </span>
         <p className="flex-1 font-display text-[13px] font-extrabold leading-snug text-gold-soft">
           Bersama kita tumbuh, menuju hasil yang lebih besar!
         </p>
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-brand-border text-gold">
-          <ChevronRightIcon className="h-4 w-4" />
-        </span>
-      </Link>
+      </div>
 
       {/* 5 menu utama — persis urutan mockup */}
       <div className="space-y-2.5">

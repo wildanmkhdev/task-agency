@@ -10,6 +10,7 @@ import {
   Bars3Icon,
   BellIcon,
   CalendarIcon,
+  ChartBarIcon,
   ChartPieIcon,
   ChevronRightIcon,
   ClipboardIcon,
@@ -42,6 +43,12 @@ export const MENU_UTAMA: MenuItem[] = [
     label: "Data Penjoki dan Admin",
     desc: "Data anggota tim dan admin.",
     icon: UsersIcon,
+  },
+  {
+    to: "/statistik",
+    label: "Statistik Tim",
+    desc: "Perbandingan transaksi, pendapatan, dan rate antar tim.",
+    icon: ChartBarIcon,
   },
   {
     to: "/jadwal",
@@ -225,6 +232,7 @@ function judulHalaman(pathname: string): string {
   if (pathname === "/rekap") return "Data Rekap Harian Tim";
   if (pathname.startsWith("/rekap/")) return "Detail Rekap Harian";
   if (pathname === "/penjoki/manajemen") return "Data Penjoki dan Admin";
+  if (pathname === "/statistik") return "Statistik Tim";
   if (pathname === "/jadwal") return "Jadwal Setor Mingguan";
   if (pathname === "/domain-owner") return "Domain Owner";
   if (pathname === "/pengaturan") return "Pengaturan Akun";
