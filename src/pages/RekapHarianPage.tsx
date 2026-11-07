@@ -132,10 +132,12 @@ export function RekapHarianPage() {
     const terlihat = base.filter((a) => jenisAdmin(a) !== "utama");
     return terlihat.map((a) => {
       /**
-       * Baris milik admin sosmed = akumulasi SEMUA tim (permintaan client),
+       * Baris admin sosmed = akumulasi SEMUA tim (permintaan client),
        * supaya angka di daftar sama dengan angka di ruangannya.
+       * Dihitung dari peran adminnya, bukan dari siapa yang sedang login:
+       * owner pun harus melihat total semua tim di baris Rania.
        */
-      const gabungan = sosmed && a.id === profile?.id;
+      const gabungan = jenisAdmin(a) === "sosmed";
       const milik = gabungan ? rekap : rekap.filter((p) => p.dibuat_oleh === a.id);
       return {
         admin: a,

@@ -69,3 +69,16 @@ export function kodeTransaksi(): string {
   const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
   return `TRX-${ymd}-${rand}`;
 }
+
+/**
+ * Nama customer untuk tampilan.
+ *
+ * Data hasil import Excel lama menyimpan nama customer dengan penanda
+ * teknis `[IMPORT] ` (mis. "[IMPORT] Eca"). Penanda itu tidak boleh terlihat
+ * di UI. Data di DB sudah dibersihkan; helper ini pengaman kalau ada import
+ * baru yang masih membawa penanda tersebut.
+ */
+export function namaCustomerTampil(nama?: string | null): string {
+  const bersih = (nama ?? "").replace(/^\[IMPORT\]\s*/i, "").trim();
+  return bersih || "-";
+}

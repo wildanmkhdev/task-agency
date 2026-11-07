@@ -128,11 +128,12 @@ export function DetailRekapPage() {
   const milikSendiri = Boolean(profile?.id) && profile?.id === adminId;
   const bolehTambah = milikSendiri && !sosmed;
   /**
-   * Ringkasan "agency" (total semua tim) HANYA untuk ruangan milik admin
-   * sosmed sendiri. Saat sosmed membuka ruangan admin lain, yang tampil
-   * tetap data admin tersebut (read-only).
+   * Ruangan admin sosmed SELALU menampilkan total seluruh tim
+   * (permintaan client): Total Pendapatan + Fee Admin Sosmed 7% dihitung
+   * dari akumulasi semua tim, bukan dari transaksi yang dia buat.
+   * Owner/admin lain yang membuka ruangan Rania melihat angka yang sama.
    */
-  const ringkasanAgency = sosmed && milikSendiri;
+  const ringkasanAgency = sosmed;
 
   const { data: rows, isLoading } = useQuery({
     queryKey: [

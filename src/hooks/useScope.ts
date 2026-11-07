@@ -8,8 +8,9 @@ import type { Team } from "../lib/types";
 /**
  * Scoping data (D1):
  * - Owner        → bisa memilih semua tim atau drill-down per tim.
- * - Admin Utama  → hanya timnya sendiri (Tim 1).
- * - Admin CS     → hanya timnya sendiri (Tim 2–5).
+ * - Admin CS     → default tim sendiri, tapi bisa filter ke tim lain
+ *                  (RLS DB jadi pagar — hanya data tim sendiri yang bisa dibaca).
+ * - Admin Utama  → sama dengan admin CS.
  * - Admin sosmed → melihat seluruh tim (read-only), tanpa filter tim.
  * RLS database tetap jadi pagar utama; filter ini lapisan UX + efisiensi query.
  */
@@ -18,7 +19,14 @@ export function useScope() {
   const isOwner = profile?.role === "OWNER";
   const readOnly = hanyaBaca(profile);
   const jenis = profile ? jenisAdmin(profile) : null;
-  const [teamFilter, setTeamFilter] = useState<string | null>(null);
+  // Default ke tim sendiri untuk admin CS — hanya dipakai saat mount pertama
+  const [teamFilter, setTeamFilter] = useState<string | null>(
+    profile && profile.role !== "OWNER" && !readOnly && profile.team_id
+      ? profile.team_id
+      : null
+  );
+  // unused: keep for future use if needed
+  void readOnly;
 
   const teamsQuery = useQuery({
     queryKey: ["teams"],
@@ -30,8 +38,8 @@ export function useScope() {
     staleTime: 5 * 60 * 1000,
   });
 
-  /** team_id untuk semua query; admin CS/utama = timnya sendiri; owner/sosmed = pilihan bebas */
-  const scopedTeamId = isOwner || readOnly ? teamFilter : (profile?.team_id ?? null);
+  // Semua role pakai teamFilter — RLS DB yang batasi akses lintas tim
+  const scopedTeamId = teamFilter;
 
   /** Terapkan scope ke query supabase (kolom team_id) */
   function applyScope<T extends { eq: (c: string, v: string) => T }>(query: T): T {

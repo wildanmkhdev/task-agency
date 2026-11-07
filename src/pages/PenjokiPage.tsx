@@ -25,7 +25,7 @@ import { MagnifyingGlassIcon } from "../components/icons";
  * Rate = 70% ulasan (rating_skill) + 30% volume tugas bulan berjalan.
  */
 export function PenjokiPage() {
-  const { isOwner, teams, teamFilter, setTeamFilter, applyScope } = useScope();
+  const { teams, teamFilter, setTeamFilter, applyScope } = useScope();
   const navigate = useNavigate();
   const [cari, setCari] = useState("");
 
@@ -107,7 +107,7 @@ export function PenjokiPage() {
         Laporan kinerja penjoki: daftar penjoki, tim, dan tingkat keaktifannya.
         Untuk mengubah data penjoki, buka menu{" "}
         <strong className="text-text-main">Data Penjoki dan Admin</strong>
-        {!isOwner && " (terkunci ke tim Anda)"}.
+        {" "}(perubahan hanya untuk tim Anda).
       </p>
 
       <div className="flex items-center gap-2">
@@ -129,13 +129,12 @@ export function PenjokiPage() {
         </Button>
       </div>
 
-      {isOwner && (
-        <TeamTabs
-          teams={timTampil(teams)}
-          value={teamFilter}
-          onChange={setTeamFilter}
-        />
-      )}
+      {/* Filter tim tampil untuk semua role (RLS tetap pagar akses tulis). */}
+      <TeamTabs
+        teams={timTampil(teams)}
+        value={teamFilter}
+        onChange={setTeamFilter}
+      />
 
       {/* Kartu penjoki (mobile) */}
       <div className="space-y-2 sm:hidden">

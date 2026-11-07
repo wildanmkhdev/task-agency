@@ -1,28 +1,34 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
-import { kodeTransaksi, rupiah } from "../lib/format";
+import { kodeTransaksi, rupiah, yyyyMmDd } from "../lib/format";
 import { hitungFee } from "../lib/fee";
-import type { JenisTugas, Penjoki, Profile } from "../lib/types";
+import type { JenisTugas, Penjoki, Pesanan, Profile } from "../lib/types";
 import { Button, Field, inputCls } from "./ui";
 
 /**
- * Dialog "Tambah Transaksi" — revisi client 3 Nov 2026:
+ * Dialog "Tambah / Edit Transaksi" — revisi client 6 Nov 2026:
  * Simplified: cuma input Tanggal, Penjoki, Jenis Tugas (+ Custom), Nominal.
  * Status otomatis SELESAI + LUNAS (customer udah payment).
  * Fee dihitung otomatis 50/23/7/20.
+ *
+ * Bila `pesanan` diisi, dialog masuk mode edit: field di-prefill dan
+ * perubahan disimpan lewat UPDATE (status/kode tidak diubah).
  */
 export function TambahTransaksiModal({
   open,
   onClose,
   admin,
   tanggalAcuan,
+  pesanan = null,
 }: {
   open: boolean;
   onClose: () => void;
   admin: Profile;
   tanggalAcuan: string;
+  pesanan?: Pesanan | null;
 }) {
+  const modeEdit = Boolean(pesanan);
   const qc = useQueryClient();
 
   const [tanggal, setTanggal] = useState(tanggalAcuan);
@@ -32,29 +38,33 @@ export function TambahTransaksiModal({
   const [nominal, setNominal] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Reset form saat dialog dibuka
+  // Reset/prefill form saat dialog dibuka
   useEffect(() => {
     if (open) {
-      setTanggal(tanggalAcuan);
-      setPenjokiId("");
-      setJenisId("");
+      setTanggal(
+        pesanan ? yyyyMmDd(new Date(pesanan.tanggal)) : tanggalAcuan
+      );
+      setPenjokiId(pesanan?.penjoki_id ?? "");
+      setJenisId(pesanan?.jenis_tugas_id ?? "");
       setJenisCustom("");
-      setNominal("");
+      setNominal(pesanan ? String(pesanan.harga) : "");
       setError(null);
     }
-  }, [open, tanggalAcuan]);
+  }, [open, tanggalAcuan, pesanan]);
 
-  const teamId = admin.team_id ?? "";
+  // Edit transaksi tim lain (khusus owner) → daftar penjoki ikut tim transaksi
+  const teamId = pesanan?.team_id ?? admin.team_id ?? "";
 
   const { data: penjokiList } = useQuery({
-    queryKey: ["penjoki-tambah-transaksi", teamId],
+    queryKey: ["penjoki-tambah-transaksi", teamId, pesanan ? "edit" : "baru"],
     queryFn: async (): Promise<Penjoki[]> => {
-      const { data, error } = await supabase
+      // Mode edit: ikutkan penjoki nonaktif agar transaksi lama tetap
+      // menampilkan penjokinya. Mode tambah: hanya penjoki aktif.
+      const base = supabase
         .from("penjoki")
         .select("id, nama, no_hp, team_id, keahlian, keterangan, aktif")
-        .eq("team_id", teamId)
-        .eq("aktif", true)
-        .order("nama");
+        .eq("team_id", teamId);
+      const { data, error } = await (pesanan ? base : base.eq("aktif", true)).order("nama");
       if (error) throw error;
       return (data ?? []) as unknown as Penjoki[];
     },
@@ -105,19 +115,33 @@ export function TambahTransaksiModal({
       const fee = hitungFee(nominalNum);
       const tanggalIso = new Date(`${tanggal}T00:00:00`).toISOString();
 
-      const { error } = await supabase.from("pesanan").insert({
-        kode: kodeTransaksi(),
+      const payload = {
         team_id: teamId,
-        customer_id: null, // Customer ga perlu
         jenis_tugas_id: finalJenisId,
         penjoki_id: penjokiId,
         harga: nominalNum,
         fee_admin: fee.feeAdmin,
         fee_owner: fee.feeOwner,
         fee_penjoki: fee.feePenjoki,
+        tanggal: tanggalIso,
+      };
+
+      if (pesanan) {
+        // Mode edit: kode, status, dan status bayar tidak diubah.
+        const { error } = await supabase
+          .from("pesanan")
+          .update(payload)
+          .eq("id", pesanan.id);
+        if (error) throw error;
+        return;
+      }
+
+      const { error } = await supabase.from("pesanan").insert({
+        ...payload,
+        kode: kodeTransaksi(),
+        customer_id: null, // Customer ga perlu
         jumlah_keterangan: "1 tugas",
         catatan: null,
-        tanggal: tanggalIso,
         status: "SELESAI", // Auto SELESAI
         status_bayar: "LUNAS", // Auto LUNAS (customer udah bayar)
         selesai_at: new Date().toISOString(),
@@ -155,10 +179,14 @@ export function TambahTransaksiModal({
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 className="font-display text-base font-extrabold text-text-main">
-              Tambah Transaksi
+              {modeEdit ? "Edit Transaksi" : "Tambah Transaksi"}
             </h2>
             <p className="text-[11px] text-text-muted">
-              Tercatat atas nama <strong className="text-text-secondary">{admin.nama_lengkap}</strong>
+              {modeEdit ? (
+                <>Mengubah <strong className="text-text-secondary">{pesanan?.kode}</strong></>
+              ) : (
+                <>Tercatat atas nama <strong className="text-text-secondary">{admin.nama_lengkap}</strong></>
+              )}
             </p>
           </div>
           <button
@@ -309,7 +337,11 @@ export function TambahTransaksiModal({
               disabled={simpan.isPending}
               className="flex-1"
             >
-              {simpan.isPending ? "Menyimpan…" : "Simpan"}
+              {simpan.isPending
+                ? "Menyimpan…"
+                : modeEdit
+                  ? "Perbarui"
+                  : "Simpan"}
             </Button>
           </div>
         </form>

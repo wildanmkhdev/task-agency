@@ -13,6 +13,10 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:sync-penjoki": "tsx scripts/sync-penjoki.ts",
     "db:seed:auth": "tsx scripts/seed-auth.ts",
+    "db:import-november": "tsx scripts/migrate-november.ts",
+    "db:koreksi-tanggal": "tsx scripts/koreksi-tanggal-nyasar.ts",
+    "db:cleanup-import": "tsx scripts/cleanup-import-label.ts",
+    "db:cek-excel": "tsx scripts/cek-angka-excel.ts",
     "check": "tsc -b && tsx scripts/check-rate.ts && tsx scripts/check-statistik.ts",
     "check:rate": "tsx scripts/check-rate.ts",
     "check:statistik": "tsx scripts/check-statistik.ts"

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
-import { rupiah, tanggalWaktu } from "../lib/format";
+import { namaCustomerTampil, rupiah, tanggalWaktu } from "../lib/format";
 import type { Pesanan } from "../lib/types";
 import { BellIcon, ChevronRightIcon } from "../components/icons";
 import { Card, EmptyState, Spinner, StatusBadge } from "../components/ui";
@@ -80,7 +80,7 @@ export function NotifikasiPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <p className="truncate text-[13px] font-bold text-text-main">
-                    {p.customer?.nama ?? "Transaksi"} · {p.kode}
+                    {p.customer?.nama ? namaCustomerTampil(p.customer.nama) : "Transaksi"} · {p.kode}
                   </p>
                   <span className="shrink-0 text-[10px] text-text-muted">
                     {waktuRelatif(p.tanggal)}

@@ -52,7 +52,7 @@ export function DashboardPage() {
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-1.5 font-display text-[13px] font-extrabold text-text-main">
                   {i + 1}. {m.label}
-                  {m.ownerOnly && (
+                  {m.terkunci && (
                     <LockClosedIcon className="h-3.5 w-3.5 text-gold" />
                   )}
                 </p>

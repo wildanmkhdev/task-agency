@@ -1,0 +1,22 @@
+# Aset lokal yang tidak dibutuhkan saat build di Vercel
+revisi/
+revisi3/
+revsi baru/
+data/
+docs/
+supabase/
+akun_seed*
+*.pdf
+*.jpeg
+*.jpg
+*.mp4
+*.ogg
+
+# Rahasia lokal (env produksi diatur lewat dashboard Vercel)
+.env
+.env.*
+
+# Hasil build lokal — Vercel melakukan build sendiri
+dist/
+node_modules/
+.tmp/

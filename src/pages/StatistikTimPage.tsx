@@ -9,11 +9,13 @@ import {
   Title,
   Tooltip,
   Legend,
+  type TooltipItem,
 } from "chart.js";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
 import { rupiah, yyyyMmDd } from "../lib/format";
 import { geserPeriode, rentangPeriode } from "../lib/periode";
+import { statistikBarLabels } from "../lib/statistik-chart";
 import type { Penjoki } from "../lib/types";
 import {
   hitungStatistikTim,
@@ -83,6 +85,7 @@ function DeltaPoin({ value }: { value: number | null }) {
  * beserta perubahan terhadap bulan sebelumnya.
  *
  * Chart menggunakan Chart.js (horizontal bar) dengan warna berbeda per tim.
+ * Nilai metrik tampil langsung pada batang, selain legend di bawah grafik.
  */
 export function StatistikTimPage() {
   const { teams } = useScope();
@@ -155,6 +158,13 @@ export function StatistikTimPage() {
     return t.rate ?? 0;
   };
 
+  const labelMetrik = daftarTim.map((t) => {
+    if (metrik === "transaksi")
+      return `${t.transaksi.toLocaleString("id-ID")} transaksi`;
+    if (metrik === "pendapatan") return rupiah(t.pendapatan);
+    return t.rate === null ? "—" : `${Math.round(t.rate)}%`;
+  });
+
   const judulChart =
     metrik === "transaksi"
       ? `Transaksi Selesai per Tim (${rentang.label})`
@@ -198,6 +208,9 @@ export function StatistikTimPage() {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
+      statistikBarLabels: {
+        labels: labelMetrik,
+      },
       legend: {
         display: false,
       },
@@ -213,12 +226,7 @@ export function StatistikTimPage() {
         padding: 12,
         displayColors: true,
         callbacks: {
-          label: (context: any) => {
-            const value = context.parsed.x;
-            if (metrik === "pendapatan") return rupiah(value);
-            if (metrik === "rate") return `${Math.round(value)}%`;
-            return `${value} transaksi`;
-          },
+          label: (context: TooltipItem<"bar">) => labelMetrik[context.dataIndex],
         },
       },
     },
@@ -343,9 +351,39 @@ export function StatistikTimPage() {
             hint="Data tim akan tampil setelah tim dibuat."
           />
         ) : (
-          <div className="mt-4" style={{ height: `${Math.max(200, daftarTim.length * 60)}px` }}>
-            <Bar data={chartData} options={chartOptions} />
-          </div>
+          <>
+            <div className="mt-4" style={{ height: `${Math.max(200, daftarTim.length * 60)}px` }}>
+              <Bar
+                data={chartData}
+                options={chartOptions}
+                plugins={[statistikBarLabels]}
+                role="img"
+                aria-label={judulChart}
+                aria-describedby="statistik-legenda"
+              />
+            </div>
+            <dl
+              id="statistik-legenda"
+              aria-label="Legenda dan nilai per tim"
+              className="mt-4 grid gap-x-6 gap-y-2 sm:grid-cols-2"
+            >
+              {daftarTim.map((t, i) => (
+                <div key={t.id} className="flex items-center justify-between gap-3">
+                  <dt className="flex items-center gap-2 text-xs text-text-secondary">
+                    <span
+                      aria-hidden="true"
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: chartData.datasets[0].backgroundColor[i] }}
+                    />
+                    {t.nama}
+                  </dt>
+                  <dd className="whitespace-nowrap text-right text-xs font-semibold tabular-nums text-text-main">
+                    {labelMetrik[i]}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </>
         )}
 
         <p className="mt-4 rounded-xl border border-line bg-surface-2 px-3 py-2 text-[10px] leading-relaxed text-text-muted">

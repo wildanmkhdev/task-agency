@@ -9,13 +9,13 @@ import {
   ArrowsRightLeftIcon,
   Bars3Icon,
   BellIcon,
-  CalendarIcon,
   ChartBarIcon,
   ChartPieIcon,
   ChevronRightIcon,
   ClipboardIcon,
   Cog6ToothIcon,
   HomeIcon,
+  LockClosedIcon,
   PlusCircleIcon,
   UserCircleIcon,
   UsersIcon,
@@ -27,7 +27,8 @@ export interface MenuItem {
   label: string;
   desc?: string;
   icon: typeof HomeIcon;
-  ownerOnly?: boolean;
+  /** Tampil untuk semua akun, tetapi isinya perlu login owner. */
+  terkunci?: boolean;
 }
 
 /** Menu utama — persis mengikuti mockup klien (beranda 5 kartu). */
@@ -51,10 +52,11 @@ export const MENU_UTAMA: MenuItem[] = [
     icon: ChartBarIcon,
   },
   {
-    to: "/jadwal",
-    label: "Jadwal Setor Mingguan",
-    desc: "Jadwal dan pencatatan setoran mingguan.",
-    icon: CalendarIcon,
+    to: "/domain-owner",
+    label: "Domain Owner",
+    desc: "Laporan owner — terkunci, perlu login owner.",
+    icon: LockClosedIcon,
+    terkunci: true,
   },
   {
     to: "/pengaturan",
@@ -233,7 +235,6 @@ function judulHalaman(pathname: string): string {
   if (pathname.startsWith("/rekap/")) return "Detail Rekap Harian";
   if (pathname === "/penjoki/manajemen") return "Data Penjoki dan Admin";
   if (pathname === "/statistik") return "Statistik Tim";
-  if (pathname === "/jadwal") return "Jadwal Setor Mingguan";
   if (pathname === "/domain-owner") return "Domain Owner";
   if (pathname === "/pengaturan") return "Pengaturan Akun";
   if (pathname === "/notifikasi") return "Notifikasi";

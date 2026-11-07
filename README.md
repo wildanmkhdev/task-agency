@@ -78,6 +78,10 @@ src/
 - `.env` & `akun_seed.txt` tidak di-commit. Jangan pernah menaruh `SERVICE_ROLE_KEY` di Vercel.
 - Nomor HP penjoki/customer hanya tampil di lingkup yang berwenang (RLS).
 
+## Statistik Tim
+
+Halaman `/statistik` menampilkan nilai langsung pada batang grafik serta legend warna dan nilai tiap tim di bawahnya, tanpa perlu hover. Label masuk ke dalam batang jika cukup lebar; pada batang pendek, label tampil tepat di sampingnya agar tetap terbaca. Nilai mengikuti tab **Transaksi**, **Pendapatan** (rupiah penuh), atau **Rata-rata Rate** (persen) dan bulan yang dipilih. Nilai nol tetap tampil; rate yang belum terukur ditampilkan sebagai `—`.
+
 ## Perintah Berguna
 
 ```bash
@@ -85,8 +89,28 @@ pnpm db:migrate      # buat migrasi baru (lihat catatan di bawah)
 pnpm db:deploy       # terapkan migrasi ke Supabase
 pnpm db:seed         # seed data (idempotent)
 pnpm db:seed:auth    # seed akun login
+pnpm db:cek-excel    # cocokkan DB vs file Excel (baris, grand total, subtotal fee)
 pnpm build           # build produksi (tsc + vite)
 ```
+
+## Sinkronisasi Data Excel
+
+File sumber ada di `data/*.xlsx`. Alur yang dipakai:
+
+```bash
+pnpm db:import-november   # impor baris baru sheet "November" (idempoten)
+pnpm db:cleanup-import    # hapus label "[IMPORT] " dari nama customer (dry run dulu)
+pnpm db:koreksi-tanggal   # koreksi 5 tanggal yang nyasar ke bulan lain (idempoten)
+pnpm db:cek-excel         # verifikasi baris + grand total + subtotal fee
+```
+
+Catatan:
+
+- Sheet **"Copy of November"** adalah arsip dan **tidak diimpor** (isinya bisa dobel).
+- Grand total **Oktober** di file Excel masih memakai formula lama `=SUM(E3:E538)` sehingga
+  tidak mencakup 5 baris terakhir. Angka yang benar adalah jumlah seluruh baris
+  (**Rp39.731.508**), dan itulah yang dipakai web. Perbaiki formula Excel bila perlu.
+- Semua angka rekap dihitung dari transaksi berstatus **SELESAI + LUNAS**.
 
 > **Catatan Prisma + Supabase**: `prisma migrate dev` memakai *shadow database* yang tidak punya schema `auth`. Untuk migrasi yang menyentuh `auth` (trigger, RLS), edit SQL manual di folder migrasi lalu jalankan **`pnpm db:deploy`**.
 

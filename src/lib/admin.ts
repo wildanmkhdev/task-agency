@@ -39,6 +39,21 @@ export function jenisAdmin(p: Pick<Profile, "nama_lengkap" | "team">): JenisAdmi
 }
 
 /**
+ * Nomor tim dari nama tim: "Tim 2" → 2, "Sosmed" → null.
+ *
+ * Dipakai untuk penamaan kartu di halaman Domain Owner ("Fee Admin 2"),
+ * supaya label tidak bergantung pada nama orang (ganti nama → label tetap).
+ */
+export function nomorTim(
+  p: Pick<Profile, "team"> | { team?: { nama?: string | null } | null }
+): number | null {
+  const cocok = norm(p.team?.nama).match(/(\d+)/);
+  if (!cocok) return null;
+  const n = Number(cocok[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
  * Admin sosmed bersifat READ-ONLY: boleh melihat data seluruh tim,
  * tidak boleh menambah atau mengubah apa pun (revisi client 3 Nov 2026).
  */
