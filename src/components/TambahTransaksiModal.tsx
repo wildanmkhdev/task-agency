@@ -1,16 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { kodeTransaksi, rupiah, yyyyMmDd } from "../lib/format";
-import { hitungFee } from "../lib/fee";
+import { BAGI_HASIL, hitungFee, persen } from "../lib/fee";
 import type { JenisTugas, Penjoki, Pesanan, Profile } from "../lib/types";
 import { Button, Field, inputCls } from "./ui";
 
 /**
  * Dialog "Tambah / Edit Transaksi" — revisi client 6 Nov 2026:
- * Simplified: cuma input Tanggal, Penjoki, Jenis Tugas (+ Custom), Nominal.
+ * Simplified: input Tanggal, Penjoki (+ asal tim), Jenis Tugas (+ Custom),
+ * Nominal, Rating kualitas 1–5 (opsional), dan Catatan bebas.
  * Status otomatis SELESAI + LUNAS (customer udah payment).
- * Fee dihitung otomatis 50/23/7/20.
+ * Fee dihitung otomatis 49/22/6/20 + Kas 3%.
  *
  * Bila `pesanan` diisi, dialog masuk mode edit: field di-prefill dan
  * perubahan disimpan lewat UPDATE (status/kode tidak diubah).
@@ -36,7 +37,12 @@ export function TambahTransaksiModal({
   const [jenisId, setJenisId] = useState("");
   const [jenisCustom, setJenisCustom] = useState("");
   const [nominal, setNominal] = useState("");
+  /** Rating kualitas 1–5 ("" = belum dinilai). */
+  const [rating, setRating] = useState("");
+  const [catatan, setCatatan] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const isOwner = admin.role === "OWNER";
 
   // Reset/prefill form saat dialog dibuka
   useEffect(() => {
@@ -48,28 +54,53 @@ export function TambahTransaksiModal({
       setJenisId(pesanan?.jenis_tugas_id ?? "");
       setJenisCustom("");
       setNominal(pesanan ? String(pesanan.harga) : "");
+      setRating(pesanan?.rating != null ? String(pesanan.rating) : "");
+      setCatatan(pesanan?.catatan ?? "");
       setError(null);
     }
   }, [open, tanggalAcuan, pesanan]);
 
-  // Edit transaksi tim lain (khusus owner) → daftar penjoki ikut tim transaksi
+  // Semua admin boleh memilih penjoki dari tim mana pun (revisi 11 Nov 2026).
+  // Tim transaksi tetap milik admin yang menginput agar rekap & fee timnya benar;
+  // owner mengikuti tim penjoki yang dipilih.
   const teamId = pesanan?.team_id ?? admin.team_id ?? "";
 
   const { data: penjokiList } = useQuery({
-    queryKey: ["penjoki-tambah-transaksi", teamId, pesanan ? "edit" : "baru"],
+    queryKey: [
+      "penjoki-tambah-transaksi",
+      "semua",
+      pesanan ? "edit" : "baru",
+    ],
     queryFn: async (): Promise<Penjoki[]> => {
       // Mode edit: ikutkan penjoki nonaktif agar transaksi lama tetap
       // menampilkan penjokinya. Mode tambah: hanya penjoki aktif.
       const base = supabase
         .from("penjoki")
-        .select("id, nama, no_hp, team_id, keahlian, keterangan, aktif")
-        .eq("team_id", teamId);
+        .select("id, nama, no_hp, team_id, keahlian, keterangan, aktif, team:teams(nama)");
       const { data, error } = await (pesanan ? base : base.eq("aktif", true)).order("nama");
       if (error) throw error;
       return (data ?? []) as unknown as Penjoki[];
     },
-    enabled: open && Boolean(teamId),
+    enabled: open && Boolean(isOwner || teamId),
   });
+
+  /** Kelompokkan pilihan penjoki per tim (optgroup) agar asal tim jelas. */
+  const penjokiPerTim = useMemo(() => {
+    const peta = new Map<string, Penjoki[]>();
+    for (const p of penjokiList ?? []) {
+      const tim = p.team?.nama ?? "Tanpa tim";
+      const isi = peta.get(tim) ?? [];
+      isi.push(p);
+      peta.set(tim, isi);
+    }
+    return [...peta.entries()].sort((a, b) => a[0].localeCompare(b[0], "id"));
+  }, [penjokiList]);
+
+  const penjokiTerpilih = (penjokiList ?? []).find((p) => p.id === penjokiId);
+  /** Tim transaksi mengikuti penjoki yang dipilih (penting saat owner lintas tim). */
+  const teamTransaksi = isOwner
+    ? (penjokiTerpilih?.team_id ?? teamId)
+    : teamId;
 
   const { data: jenisList } = useQuery({
     queryKey: ["jenis-tugas"],
@@ -87,7 +118,7 @@ export function TambahTransaksiModal({
 
   const simpan = useMutation({
     mutationFn: async () => {
-      if (!teamId) throw new Error("Akun ini belum terhubung ke tim.");
+      if (!teamTransaksi) throw new Error("Pilih penjoki terlebih dahulu.");
       if (!penjokiId) throw new Error("Penjoki wajib dipilih.");
       
       // Validasi jenis tugas: pilih dari list atau custom
@@ -114,9 +145,12 @@ export function TambahTransaksiModal({
 
       const fee = hitungFee(nominalNum);
       const tanggalIso = new Date(`${tanggal}T00:00:00`).toISOString();
+      const ratingNum = rating === "" ? null : Number(rating);
+      if (ratingNum !== null && (!Number.isFinite(ratingNum) || ratingNum < 1 || ratingNum > 5))
+        throw new Error("Rating harus antara 1 sampai 5.");
 
       const payload = {
-        team_id: teamId,
+        team_id: teamTransaksi,
         jenis_tugas_id: finalJenisId,
         penjoki_id: penjokiId,
         harga: nominalNum,
@@ -124,6 +158,8 @@ export function TambahTransaksiModal({
         fee_owner: fee.feeOwner,
         fee_penjoki: fee.feePenjoki,
         tanggal: tanggalIso,
+        rating: ratingNum,
+        catatan: catatan.trim() || null,
       };
 
       if (pesanan) {
@@ -141,7 +177,6 @@ export function TambahTransaksiModal({
         kode: kodeTransaksi(),
         customer_id: null, // Customer ga perlu
         jumlah_keterangan: "1 tugas",
-        catatan: null,
         status: "SELESAI", // Auto SELESAI
         status_bayar: "LUNAS", // Auto LUNAS (customer udah bayar)
         selesai_at: new Date().toISOString(),
@@ -157,6 +192,7 @@ export function TambahTransaksiModal({
       qc.invalidateQueries({ queryKey: ["dashboard-pesanan"] });
       qc.invalidateQueries({ queryKey: ["penjoki-rate"] });
       qc.invalidateQueries({ queryKey: ["penjoki-tugas-bulan-ini"] });
+      qc.invalidateQueries({ queryKey: ["penjoki-rating-rata"] });
       qc.invalidateQueries({ queryKey: ["jenis-tugas"] });
       onClose();
     },
@@ -226,10 +262,14 @@ export function TambahTransaksiModal({
               required
             >
               <option value="">— Pilih penjoki —</option>
-              {(penjokiList ?? []).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nama}
-                </option>
+              {penjokiPerTim.map(([tim, list]) => (
+                <optgroup key={tim} label={tim}>
+                  {list.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nama}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </Field>
@@ -281,6 +321,52 @@ export function TambahTransaksiModal({
             />
           </Field>
 
+          <Field label="Rating Kualitas (1–5, opsional)">
+            <div className="flex items-center gap-1.5">
+              {[1, 2, 3, 4, 5].map((n) => {
+                const aktif = Number(rating) >= n;
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setRating(rating === String(n) ? "" : String(n))}
+                    aria-label={`Beri rating ${n} dari 5`}
+                    aria-pressed={aktif}
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg leading-none transition-colors ${
+                      aktif
+                        ? "border-brand-border bg-brand/15 text-gold"
+                        : "border-line bg-surface-2 text-text-muted hover:text-gold"
+                    }`}
+                  >
+                    ★
+                  </button>
+                );
+              })}
+              <span className="ml-1 text-xs font-bold text-text-secondary">
+                {rating === "" ? "Belum dinilai" : `${rating}/5`}
+              </span>
+              {rating !== "" && (
+                <button
+                  type="button"
+                  onClick={() => setRating("")}
+                  className="ml-auto text-[11px] font-semibold text-text-muted hover:text-text-main"
+                >
+                  Hapus
+                </button>
+              )}
+            </div>
+          </Field>
+
+          <Field label="Catatan (opsional)">
+            <textarea
+              rows={2}
+              placeholder="Mis. revisi cepat, customer minta format tertentu…"
+              value={catatan}
+              onChange={(e) => setCatatan(e.target.value)}
+              className={`${inputCls} resize-y`}
+            />
+          </Field>
+
           {/* Preview Fee */}
           {Number(nominal) > 0 && (
             <div className="rounded-xl border border-line bg-surface-2 p-3">
@@ -289,27 +375,33 @@ export function TambahTransaksiModal({
               </p>
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-text-secondary">Penjoki (50%)</span>
+                  <span className="text-text-secondary">Penjoki ({persen(BAGI_HASIL.penjoki)}%)</span>
                   <span className="font-bold text-text-main tabular">
                     {rupiah(hitungFee(Number(nominal)).feePenjoki)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-text-secondary">Admin CS (23%)</span>
+                  <span className="text-text-secondary">Admin CS ({persen(BAGI_HASIL.adminCs)}%)</span>
                   <span className="font-bold text-text-main tabular">
                     {rupiah(hitungFee(Number(nominal)).feeAdmin)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-text-secondary">Admin Sosmed (7%)</span>
+                  <span className="text-text-secondary">Admin Sosmed ({persen(BAGI_HASIL.adminSosmed)}%)</span>
                   <span className="font-bold text-text-main tabular">
                     {rupiah(hitungFee(Number(nominal)).feeSosmed)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-text-secondary">Owner (20%)</span>
+                  <span className="text-text-secondary">Owner ({persen(BAGI_HASIL.owner)}%)</span>
                   <span className="font-bold text-text-main tabular">
                     {rupiah(hitungFee(Number(nominal)).feeOwner)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">Kas ({persen(BAGI_HASIL.kas)}%)</span>
+                  <span className="font-bold text-text-main tabular">
+                    {rupiah(hitungFee(Number(nominal)).feeKas)}
                   </span>
                 </div>
               </div>

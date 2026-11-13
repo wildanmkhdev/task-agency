@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "JokiTugasAja_ID — Dashboard Admin",
   "short_name": "JokiTugas",
   "description": "Dashboard manajemen agency JokiTugasAja_ID — rekap harian, transaksi, penjoki, dan laporan.",
@@ -7,9 +8,11 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
   "background_color": "#021f1a",
   "theme_color": "#021f1a",
+  "categories": ["business", "productivity", "finance"],
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -28,6 +31,22 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Rekap Harian",
+      "short_name": "Rekap",
+      "description": "Buka rekap pendapatan tim",
+      "url": "/rekap",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Transaksi",
+      "short_name": "Transaksi",
+      "description": "Daftar pesanan dan transaksi",
+      "url": "/pesanan",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

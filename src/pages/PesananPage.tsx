@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
@@ -6,16 +6,17 @@ import { useAuth } from "../context/AuthContext";
 import { hanyaBaca } from "../lib/admin";
 import { namaCustomerTampil, rupiah, tanggalPendek, yyyyMmDd } from "../lib/format";
 import type { Pesanan } from "../lib/types";
-import { hitungFee } from "../lib/fee";
+import { BAGI_HASIL, hitungFee, persen } from "../lib/fee";
 import { ExportButtons, type ExportColumn } from "../components/ExportButtons";
 import { Button, Card, EmptyState, Spinner, StatusBadge, TeamTabs } from "../components/ui";
 import { TambahTransaksiModal } from "../components/TambahTransaksiModal";
 import { PeriodeTabs } from "../components/PeriodeTabs";
 import { geserPeriode, rentangPeriode, type Periode } from "../lib/periode";
 import { timTampil } from "../lib/teams";
+import { belumAdaData, formatRate, ratePenjoki } from "../lib/rate";
 
 const PESANAN_SELECT =
-  "id, kode, harga, fee_admin, fee_owner, fee_penjoki, status, status_bayar, tanggal, jumlah_keterangan, team_id, customer:customers(nama), penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama), team:teams(nama)";
+  "id, kode, harga, fee_admin, fee_owner, fee_penjoki, status, status_bayar, tanggal, jumlah_keterangan, catatan, rating, team_id, penjoki_id, customer:customers(nama), penjoki:penjoki(id, nama, rating_skill), jenis_tugas:jenis_tugas(nama), team:teams(nama)";
 
 /**
  * Daftar Transaksi (revisi 6 Nov 2026).
@@ -133,6 +134,71 @@ export function PesananPage() {
 
   const list = rows ?? [];
 
+  /**
+   * Rate penjoki per bulan — sumbernya sama dengan Data Penjoki/Admin:
+   * rata-rata `pesanan.rating` pada bulan transaksi, dengan fallback
+   * `penjoki.rating_skill` (rating kualitas dari rekap DOCX).
+   *
+   * Sebelumnya kolom Rating di tabel transaksi membaca `pesanan.rating`
+   * langsung, sehingga hampir semua baris hasil import tampil "—".
+   */
+  const bulanTampil = useMemo(
+    () =>
+      [...new Set(list.map((p) => String(p.tanggal).slice(0, 7)))].sort(),
+    [list]
+  );
+
+  const { data: ratingBulanan } = useQuery({
+    queryKey: ["rate-penjoki-transaksi", bulanTampil.join(",")],
+    enabled: bulanTampil.length > 0,
+    staleTime: 60_000,
+    queryFn: async (): Promise<Map<string, number[]>> => {
+      const awal = `${bulanTampil[0]}-01`;
+      const [tahunAkhir, bulanAkhir] = bulanTampil[bulanTampil.length - 1]
+        .split("-")
+        .map(Number);
+      // Awal bulan setelah bulan terakhir, batas eksklusif.
+      const akhir = new Date(Date.UTC(tahunAkhir, bulanAkhir, 1))
+        .toISOString()
+        .slice(0, 10);
+
+      const { data, error } = await supabase
+        .from("pesanan")
+        .select("penjoki_id, rating, tanggal, status")
+        .gte("tanggal", awal)
+        .lt("tanggal", akhir)
+        .not("rating", "is", null)
+        .limit(5000);
+      if (error) throw error;
+
+      const peta = new Map<string, number[]>();
+      for (const r of data ?? []) {
+        if (r.status === "BATAL") continue;
+        const nilai = Number(r.rating);
+        if (!Number.isFinite(nilai)) continue;
+        const kunci = `${r.penjoki_id}|${String(r.tanggal).slice(0, 7)}`;
+        const daftar = peta.get(kunci) ?? [];
+        daftar.push(nilai);
+        peta.set(kunci, daftar);
+      }
+      return peta;
+    },
+  });
+
+  /** Rate penjoki untuk satu baris transaksi (bulan transaksi tersebut). */
+  const rateBaris = (p: Pesanan) => {
+    const nilai =
+      ratingBulanan?.get(`${p.penjoki_id}|${String(p.tanggal).slice(0, 7)}`) ??
+      [];
+    const fallback = p.penjoki?.rating_skill ?? null;
+    return {
+      rate: ratePenjoki(nilai, fallback),
+      kosong: belumAdaData(nilai, fallback),
+      /** Belum ada rating transaksi bulan itu → angka berasal dari rating kualitas. */
+      pakaiKualitas: nilai.length === 0 && fallback != null,
+    };
+  };
+
   /** Admin hanya boleh mengelola transaksi timnya sendiri; owner semua tim. */
   const bisaKelola = (p: Pesanan) =>
     !readOnly && (isOwner || p.team_id === profile?.team_id);
@@ -145,15 +211,20 @@ export function PesananPage() {
     { key: "penjoki", label: "Penjoki", render: (r) => String(r.penjoki) },
     { key: "tim", label: "Tim", render: (r: Record<string, unknown>) => String(r.tim) },
     { key: "harga", label: "Payment Customer", currency: true },
-    { key: "fee_penjoki", label: "Fee Penjoki (50%)", currency: true },
-    { key: "fee_admin", label: "Fee Admin CS (23%)", currency: true },
-    { key: "fee_sosmed", label: "Fee Admin Sosmed (7%)", currency: true },
-    { key: "fee_owner", label: "Fee Owner (20%)", currency: true },
+    { key: "fee_penjoki", label: `Fee Penjoki (${persen(BAGI_HASIL.penjoki)}%)`, currency: true },
+    { key: "fee_admin", label: `Fee Admin CS (${persen(BAGI_HASIL.adminCs)}%)`, currency: true },
+    { key: "fee_sosmed", label: `Fee Admin Sosmed (${persen(BAGI_HASIL.adminSosmed)}%)`, currency: true },
+    { key: "fee_owner", label: `Fee Owner (${persen(BAGI_HASIL.owner)}%)`, currency: true },
+    { key: "fee_kas", label: `Kas (${persen(BAGI_HASIL.kas)}%)`, currency: true },
+    { key: "rating", label: "Rating Transaksi (1–5)", render: (r) => (r.rating == null ? "-" : String(r.rating)) },
+    { key: "rate_penjoki", label: "Rate Penjoki (1–5)", render: (r) => String(r.rate_penjoki ?? "-") },
+    { key: "catatan", label: "Catatan", render: (r) => String(r.catatan ?? "") },
     { key: "status", label: "Status", render: (r) => String(r.status) },
   ];
 
   const exportRows = list.map((p) => {
     const fee = hitungFee(p.harga);
+    const rate = rateBaris(p);
     return {
       kode: p.kode,
       tanggal: p.tanggal,
@@ -166,6 +237,10 @@ export function PesananPage() {
       fee_admin: fee.feeAdmin,
       fee_sosmed: fee.feeSosmed,
       fee_owner: fee.feeOwner,
+      fee_kas: fee.feeKas,
+      rating: p.rating,
+      rate_penjoki: rate.kosong ? "-" : formatRate(rate.rate),
+      catatan: p.catatan,
       status: p.status,
     };
   });
@@ -233,120 +308,183 @@ export function PesananPage() {
             hint="Tidak ada data pada periode/tim ini. Geser tanggal atau ubah filter."
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead>
-                <tr className="border-b border-line bg-surface-2/60 text-left text-[10px] uppercase tracking-wider text-text-muted">
-                  <th className="px-4 py-3 font-bold">Kode</th>
-                  <th className="px-4 py-3 font-bold">Penjoki</th>
-                  <th className="px-4 py-3 font-bold">Tim</th>
-                  <th className="px-4 py-3 text-right font-bold">Harga</th>
-                  <th className="px-4 py-3 text-right font-bold">Fee Penjoki</th>
-                  <th className="px-4 py-3 font-bold">Status</th>
-                  {!readOnly && <th className="px-4 py-3 text-right font-bold">Aksi</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((p) => {
-                  const fee = hitungFee(p.harga);
-                  return (
-                    <tr
-                      key={p.id}
-                      className="border-b border-line-soft last:border-0 hover:bg-surface-2/50"
-                    >
-                      <td className="px-4 py-3">
-                        <p className="font-bold text-text-main">{p.kode}</p>
-                        <p className="text-[11px] text-text-muted">{tanggalPendek(p.tanggal)}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="font-semibold text-text-main">{p.penjoki?.nama ?? "-"}</p>
-                        <p className="text-[11px] text-text-muted">
-                          {p.jenis_tugas?.nama ?? "-"} · {p.jumlah_keterangan}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 text-xs font-bold text-text-secondary">
-                        {p.team?.nama ?? "-"}
-                      </td>
-                      <td className="px-4 py-3 text-right font-extrabold text-gold-soft tabular">
-                        {rupiah(p.harga)}
-                        {!isOwner && (
-                          <>
-                            <p className="mt-0.5 text-[10px] font-medium text-text-muted">
-                              CS {rupiah(fee.feeAdmin)} · Sosmed {rupiah(fee.feeSosmed)}
+          <div>
+            {/* Indikator geser horizontal pada layar HP / tablet */}
+            <div className="flex items-center justify-between border-b border-line/60 bg-surface-2/40 px-3.5 py-2 text-[11px] text-text-muted sm:hidden">
+              <span className="flex items-center gap-1.5 font-semibold text-text-main">
+                <svg className="h-3.5 w-3.5 text-gold shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                </svg>
+                Tabel Transaksi
+              </span>
+              <span className="font-medium text-gold">← Geser ke kanan untuk rincian & aksi →</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[780px] text-left text-xs">
+                <thead>
+                  <tr className="border-b border-line bg-surface-2/80 text-[10px] uppercase tracking-wider text-text-muted">
+                    <th className="sticky left-0 z-20 bg-surface-2 px-3.5 py-2.5 font-bold border-r border-line shadow-[3px_0_6px_-2px_rgba(0,0,0,0.35)]">
+                      Kode
+                    </th>
+                    <th className="px-3.5 py-2.5 font-bold">Penjoki</th>
+                    <th className="px-3.5 py-2.5 font-bold">Rate Penjoki</th>
+                    <th className="px-3.5 py-2.5 font-bold">Tim</th>
+                    <th className="px-3.5 py-2.5 text-right font-bold">Payment</th>
+                    <th className="px-3.5 py-2.5 text-right font-bold">Fee Penjoki</th>
+                    <th className="px-3.5 py-2.5 font-bold">Status</th>
+                    {!readOnly && <th className="px-3.5 py-2.5 text-right font-bold">Aksi</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line-soft">
+                  {list.map((p) => {
+                    const fee = hitungFee(p.harga);
+                    const rate = rateBaris(p);
+                    return (
+                      <tr
+                        key={p.id}
+                        className="transition-colors hover:bg-surface-2/40"
+                      >
+                        {/* Kolom Kode: Sticky di kiri saat scroll di mobile */}
+                        <td className="sticky left-0 z-10 bg-surface px-3.5 py-2.5 whitespace-nowrap border-r border-line shadow-[3px_0_6px_-2px_rgba(0,0,0,0.35)]">
+                          <p className="font-display font-bold text-text-main text-[12px]">{p.kode}</p>
+                          <p className="text-[10px] text-text-muted">{tanggalPendek(p.tanggal)}</p>
+                        </td>
+
+                        {/* Penjoki */}
+                        <td className="px-3.5 py-2.5">
+                          <p className="font-semibold text-text-main whitespace-nowrap text-[12px]">
+                            {p.penjoki?.nama ?? "-"}
+                          </p>
+                          <p className="text-[10px] text-text-muted whitespace-nowrap">
+                            {p.jenis_tugas?.nama ?? "-"} · {p.jumlah_keterangan}
+                          </p>
+                          {p.catatan?.trim() && (
+                            <p className="mt-0.5 max-w-[200px] truncate text-[10px] italic text-text-muted/80">
+                              “{p.catatan.trim()}”
                             </p>
-                            <p className="text-[10px] font-medium text-text-muted">
-                              Owner {rupiah(fee.feeOwner)}
-                            </p>
-                          </>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold text-text-main tabular">
-                        {rupiah(fee.feePenjoki)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={p.status} />
-                      </td>
-                      {!readOnly && (
-                        <td className="px-4 py-3 text-right">
-                          {bisaKelola(p) && (
-                            <div className="flex flex-wrap justify-end gap-1.5">
-                              {p.status === "MENUNGU" && (
-                                <Button
-                                  variant="primary"
-                                  className="px-3 py-1.5 text-xs"
-                                  onClick={() =>
-                                    update.mutate({ id: p.id, patch: { status: "DIKERJAKAN" } })
-                                  }
-                                >
-                                  Kerjakan
-                                </Button>
-                              )}
-                              {p.status === "DIKERJAKAN" && (
-                                <Button
-                                  variant="success"
-                                  className="px-3 py-1.5 text-xs"
-                                  title="Tandai selesai (masuk rekap)"
-                                  onClick={() =>
-                                    update.mutate({
-                                      id: p.id,
-                                      patch: {
-                                        status: "SELESAI",
-                                        selesai_at: new Date().toISOString(),
-                                      },
-                                    })
-                                  }
-                                >
-                                  Selesai
-                                </Button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                className="px-3 py-1.5 text-xs"
-                                title="Edit transaksi"
-                                onClick={() => setEditTarget(p)}
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                variant="danger"
-                                className="px-3 py-1.5 text-xs"
-                                title="Hapus transaksi"
-                                onClick={() => {
-                                  setHapusTarget(p);
-                                  setHapusError(null);
-                                }}
-                              >
-                                Hapus
-                              </Button>
+                          )}
+                        </td>
+
+                        {/* Rate Penjoki */}
+                        <td className="px-3.5 py-2.5 whitespace-nowrap">
+                          {rate.kosong ? (
+                            <span className="text-xs text-text-muted">—</span>
+                          ) : (
+                            <div className="inline-flex flex-col">
+                              <span className="inline-flex items-center gap-1 rounded-full border border-brand-border/60 bg-brand/10 px-2 py-0.5 text-[11px] font-bold text-gold">
+                                ★ {formatRate(rate.rate)}
+                                <span className="text-[9px] font-semibold text-text-muted">/5</span>
+                              </span>
+                              <span className="mt-0.5 text-[9px] text-text-muted">
+                                {rate.pakaiKualitas
+                                  ? "rating kualitas"
+                                  : p.rating != null
+                                    ? `transaksi ★ ${p.rating}`
+                                    : "rata-rata bulan"}
+                              </span>
                             </div>
                           )}
                         </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+
+                        {/* Tim */}
+                        <td className="px-3.5 py-2.5 whitespace-nowrap">
+                          <span className="rounded-md border border-brand-border/40 bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-gold">
+                            {p.team?.nama ?? "-"}
+                          </span>
+                        </td>
+
+                        {/* Payment Customer */}
+                        <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
+                          <p className="font-display font-extrabold text-gold-soft tabular text-[12px]">
+                            {rupiah(p.harga)}
+                          </p>
+                          {!isOwner && (
+                            <div className="mt-0.5 text-[9px] text-text-muted space-y-0.5">
+                              <p>CS {rupiah(fee.feeAdmin)} · Sos {rupiah(fee.feeSosmed)}</p>
+                              <p>Owner {rupiah(fee.feeOwner)} · Kas {rupiah(fee.feeKas)}</p>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Fee Penjoki */}
+                        <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
+                          <p className="font-display font-bold text-emerald-400 tabular text-[12px]">
+                            {rupiah(fee.feePenjoki)}
+                          </p>
+                          <p className="text-[9px] text-text-muted">
+                            ({persen(BAGI_HASIL.penjoki)}%)
+                          </p>
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-3.5 py-2.5 whitespace-nowrap">
+                          <StatusBadge status={p.status} />
+                        </td>
+
+                        {/* Tombol Aksi */}
+                        {!readOnly && (
+                          <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
+                            {bisaKelola(p) && (
+                              <div className="inline-flex items-center justify-end gap-1">
+                                {p.status === "MENUNGU" && (
+                                  <Button
+                                    variant="primary"
+                                    className="px-2.5 py-1 text-[11px] font-bold"
+                                    onClick={() =>
+                                      update.mutate({ id: p.id, patch: { status: "DIKERJAKAN" } })
+                                    }
+                                  >
+                                    Kerjakan
+                                  </Button>
+                                )}
+                                {p.status === "DIKERJAKAN" && (
+                                  <Button
+                                    variant="success"
+                                    className="px-2.5 py-1 text-[11px] font-bold"
+                                    title="Tandai selesai (masuk rekap)"
+                                    onClick={() =>
+                                      update.mutate({
+                                        id: p.id,
+                                        patch: {
+                                          status: "SELESAI",
+                                          selesai_at: new Date().toISOString(),
+                                        },
+                                      })
+                                    }
+                                  >
+                                    Selesai
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  className="px-2.5 py-1 text-[11px] font-bold"
+                                  title="Edit transaksi"
+                                  onClick={() => setEditTarget(p)}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="danger"
+                                  className="px-2.5 py-1 text-[11px] font-bold"
+                                  title="Hapus transaksi"
+                                  onClick={() => {
+                                    setHapusTarget(p);
+                                    setHapusError(null);
+                                  }}
+                                >
+                                  Hapus
+                                </Button>
+                              </div>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </Card>

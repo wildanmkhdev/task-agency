@@ -234,9 +234,11 @@ function judulHalaman(pathname: string): string {
   if (pathname === "/rekap") return "Data Rekap Harian Tim";
   if (pathname.startsWith("/rekap/")) return "Detail Rekap Harian";
   if (pathname === "/penjoki/manajemen") return "Data Penjoki dan Admin";
+  if (pathname.startsWith("/penjoki/manajemen/")) return "Detail Penjoki";
   if (pathname === "/statistik") return "Statistik Tim";
   if (pathname === "/domain-owner") return "Domain Owner";
   if (pathname === "/pengaturan") return "Pengaturan Akun";
+  if (pathname === "/download") return "Download Aplikasi";
   if (pathname === "/notifikasi") return "Notifikasi";
   if (pathname === "/pesanan") return "Transaksi";
   if (pathname === "/pesanan/baru") return "Input Fee";

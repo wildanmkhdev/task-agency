@@ -92,6 +92,20 @@ export function keteranganJabatan(p: Pick<Profile, "nama_lengkap" | "team">): st
   return KETERANGAN_JABATAN[jenisAdmin(p)];
 }
 
+/**
+ * Nama admin pertama per tim — dipakai daftar penjoki & halaman detail supaya
+ * "Admin penanggung jawab" yang tampil selalu orang yang sama.
+ */
+export function petaAdminPerTim<
+  T extends Pick<Profile, "team_id" | "nama_lengkap">
+>(list: T[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const a of list) {
+    if (a.team_id && !m.has(a.team_id)) m.set(a.team_id, a.nama_lengkap);
+  }
+  return m;
+}
+
 /** Urutan daftar admin: tim utama → tim 2..5 → admin sosmed (paling bawah). */
 export function urutkanAdmin<T extends Pick<Profile, "nama_lengkap" | "team">>(
   list: T[]

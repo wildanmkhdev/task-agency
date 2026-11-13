@@ -4,6 +4,12 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { rupiah, yyyyMmDd } from "../lib/format";
+import {
+  BAGI_HASIL,
+  alokasiFee,
+  feeSosmedAkumulasi,
+  persen,
+} from "../lib/fee";
 import { masukRekap, type Pesanan, type Profile } from "../lib/types";
 import {
   jenisAdmin,
@@ -22,7 +28,7 @@ import { PeriodeTabs } from "../components/PeriodeTabs";
 import { Card, EmptyState, Spinner } from "../components/ui";
 
 const PESANAN_SELECT =
-  "id, harga, status, status_bayar, tanggal, dibuat_oleh, penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama)";
+  "id, kode, harga, status, status_bayar, tanggal, dibuat_oleh, penjoki:penjoki(nama), jenis_tugas:jenis_tugas(nama)";
 
 function persenPerubahan(now: number, prev: number): number | null {
   if (!prev) return null;
@@ -55,6 +61,8 @@ function Trend({ value, periode }: { value: number | null; periode: Periode }) {
  * - Tombol "Tambah Transaksi" hanya muncul di ruangan sendiri.
  * - Admin Sosmed: read-only semua, tidak bisa tambah transaksi.
  * - Owner: lihat semua & input pesanan lewat menu "Input Fee".
+ * - Kas 3% ditampilkan di halaman ini untuk SEMUA admin (revisi 11 Nov 2026),
+ *   di BAWAH Total Pendapatan (revisi owner 11 Nov 2026).
  */
 export function RekapHarianPage() {
   const { profile } = useAuth();
@@ -126,27 +134,44 @@ export function RekapHarianPage() {
   const totalPendapatan = rekapScope.reduce((s, p) => s + p.harga, 0);
   const totalPendapatanSebelumnya = rekapScopeSebelumnya.reduce((s, p) => s + p.harga, 0);
 
+  /** Kas 3% — tampil untuk semua admin (owner, CS tiap tim, sosmed). */
+  const feeKas = alokasiFee(totalPendapatan).kas;
+
+  /**
+   * Fee Admin Sosmed = akumulasi 6% dari pendapatan TIAP admin,
+   * bukan total pendapatan kotor (koreksi client 12 Nov 2026).
+   */
+  const feeSosmed = feeSosmedAkumulasi(rekap);
+
   const daftarAdmin = useMemo(() => {
     const base = urutkanAdmin(admins ?? []);
     // Hide admin utama (Dea) dari list rekap, tapi tetap bisa akses ruangannya via URL
     const terlihat = base.filter((a) => jenisAdmin(a) !== "utama");
     return terlihat.map((a) => {
       /**
-       * Baris admin sosmed = akumulasi SEMUA tim (permintaan client),
-       * supaya angka di daftar sama dengan angka di ruangannya.
+       * Baris admin sosmed BUKAN total pendapatan kotor: yang tampil adalah
+       * akumulasi fee 6% dari pendapatan tiap admin (koreksi client
+       * 12 Nov 2026). Angka ini sama dengan yang tampil di ruangan Rania.
        * Dihitung dari peran adminnya, bukan dari siapa yang sedang login:
-       * owner pun harus melihat total semua tim di baris Rania.
+       * owner pun melihat angka fee yang sama di baris Rania.
+       *
+       * Jaring pengaman tambahan: bila akun yang sedang login memang admin
+       * sosmed, barisnya sendiri SELALU memakai akumulasi fee — meskipun
+       * nama timnya di database berubah (pernah muncul 0 di production).
        */
-      const gabungan = jenisAdmin(a) === "sosmed";
+      const gabungan =
+        jenisAdmin(a) === "sosmed" || (sosmed && a.id === profile?.id);
       const milik = gabungan ? rekap : rekap.filter((p) => p.dibuat_oleh === a.id);
       return {
         admin: a,
         jumlah: milik.length,
-        pendapatan: milik.reduce((s, p) => s + p.harga, 0),
+        pendapatan: gabungan
+          ? feeSosmed
+          : milik.reduce((s, p) => s + p.harga, 0),
         gabungan,
       };
     });
-  }, [admins, sosmed, profile?.id, rekap]);
+  }, [admins, sosmed, profile?.id, rekap, feeSosmed]);
 
   if (isLoading) return <Spinner label="Memuat rekap…" />;
 
@@ -198,9 +223,13 @@ export function RekapHarianPage() {
         </p>
       )}
 
-      {/* 2 kotak utama */}
+      {/*
+        3 kotak utama — urutan revisi owner 11 Nov 2026:
+        Total Pendapatan di ATAS, Kas 3% di BAWAHnya.
+        (Sebelumnya Kas berada di atas Total Pendapatan.)
+      */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="card-premium rounded-card p-4 sm:p-5">
+        <div className="col-span-2 card-premium rounded-card p-4 sm:p-5">
           <div className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-brand-border bg-brand/15 text-gold">
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
@@ -245,6 +274,28 @@ export function RekapHarianPage() {
             />
           </div>
         </div>
+
+        <div className="card-premium rounded-card p-4 sm:p-5">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-teal-400/25 bg-teal-400/10 text-teal-300">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                <rect x="3" y="6" width="18" height="13" rx="2.5" />
+                <path d="M3 10h18M16.5 14.5h1.5" />
+              </svg>
+            </span>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-[11px]">
+              Kas ({persen(BAGI_HASIL.kas)}%)
+            </p>
+          </div>
+          <p className="mt-3 font-display text-xl font-extrabold text-teal-300 tabular sm:text-2xl">
+            {rupiah(feeKas)}
+          </p>
+          <div className="mt-1">
+            <span className="text-[11px] font-semibold text-text-muted">
+              Otomatis dari total pendapatan
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Rekap per admin */}
@@ -267,7 +318,7 @@ export function RekapHarianPage() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {daftarAdmin.map(({ admin, pendapatan }) => {
+            {daftarAdmin.map(({ admin, pendapatan, gabungan }) => {
               const nama = namaLengkapAdmin(admin);
               return (
                 <button
@@ -295,6 +346,11 @@ export function RekapHarianPage() {
                     <p className="text-sm font-extrabold text-gold-soft tabular">
                       {rupiah(pendapatan)}
                     </p>
+                    {gabungan && (
+                      <p className="text-[10px] font-semibold text-text-muted">
+                        Akumulasi fee {persen(BAGI_HASIL.adminSosmed)}%
+                      </p>
+                    )}
                   </div>
                   <svg
                     viewBox="0 0 24 24"

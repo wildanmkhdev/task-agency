@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useScope } from "../hooks/useScope";
 import { kodeTransaksi, rupiah, yyyyMmDd } from "../lib/format";
-import { hitungFee } from "../lib/fee";
+import { BAGI_HASIL, hitungFee, persen } from "../lib/fee";
 import type {
   Customer,
   JenisTugas,
@@ -125,7 +125,7 @@ export function TambahPesananPage() {
         if (!custId) throw new Error("Customer wajib dipilih.");
       }
 
-      // Fee dibagi otomatis: penjoki 50% · admin CS 23% · sosmed 7% · owner 20%
+      // Fee dibagi otomatis: penjoki 49% · admin CS 22% · sosmed 6% · owner 20% · kas 3%
       const fee = hitungFee(hargaNum);
       const { error } = await supabase.from("pesanan").insert({
         kode: kodeTransaksi(),
@@ -324,7 +324,7 @@ export function TambahPesananPage() {
             </Field>
           </div>
 
-          {/* Preview fee otomatis (revisi: 50/23/7/20 dari harga) */}
+          {/* Preview fee otomatis (49/22/6/20 + Kas 3% dari harga) */}
           {Number(harga) > 0 && (
             <div className="rounded-xl border border-brand-border bg-brand/10 px-4 py-3 text-sm">
               <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gold">
@@ -332,27 +332,33 @@ export function TambahPesananPage() {
               </p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 tabular">
                 <span className="text-text-secondary">
-                  Penjoki (50%):{" "}
+                  Penjoki ({persen(BAGI_HASIL.penjoki)}%):{" "}
                   <strong className="text-text-main">
                     {rupiah(hitungFee(Number(harga)).feePenjoki)}
                   </strong>
                 </span>
                 <span className="text-text-secondary">
-                  Admin CS (23%):{" "}
+                  Admin CS ({persen(BAGI_HASIL.adminCs)}%):{" "}
                   <strong className="text-text-main">
                     {rupiah(hitungFee(Number(harga)).feeAdmin)}
                   </strong>
                 </span>
                 <span className="text-text-secondary">
-                  Admin Sosmed (7%):{" "}
+                  Admin Sosmed ({persen(BAGI_HASIL.adminSosmed)}%):{" "}
                   <strong className="text-text-main">
                     {rupiah(hitungFee(Number(harga)).feeSosmed)}
                   </strong>
                 </span>
                 <span className="text-text-secondary">
-                  Owner (20%):{" "}
+                  Owner ({persen(BAGI_HASIL.owner)}%):{" "}
                   <strong className="text-text-main">
                     {rupiah(hitungFee(Number(harga)).feeOwner)}
+                  </strong>
+                </span>
+                <span className="text-text-secondary">
+                  Kas ({persen(BAGI_HASIL.kas)}%):{" "}
+                  <strong className="text-text-main">
+                    {rupiah(hitungFee(Number(harga)).feeKas)}
                   </strong>
                 </span>
               </div>

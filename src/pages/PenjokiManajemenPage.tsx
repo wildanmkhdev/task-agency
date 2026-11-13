@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
@@ -9,6 +10,7 @@ import {
   keteranganJabatan,
   labelJabatan,
   namaLengkapAdmin,
+  petaAdminPerTim,
   urutkanAdmin,
 } from "../lib/admin";
 import {
@@ -21,10 +23,11 @@ import {
   StatusKinerjaBadge,
   inputCls,
 } from "../components/ui";
-import { KETERANGAN_RATE, belumAdaData, hitungRate } from "../lib/rate";
+import { KETERANGAN_RATE, belumAdaData, formatRate, labelRating, ratePenjoki } from "../lib/rate";
 import { adaDiTimTampil, timTampil } from "../lib/teams";
 import {
   ChevronRightIcon,
+  EyeIcon,
   FunnelIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
@@ -49,6 +52,7 @@ export function PenjokiManajemenPage() {
   const isSosmed = profile?.team?.nama?.toLowerCase().includes('sosmed');
   const readOnlyGlobal = isSosmed; // Sosmed ga bisa edit sama sekali
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const formRef = useRef<HTMLDivElement>(null);
 
   const [tab, setTab] = useState<Tab>("penjoki");
@@ -64,7 +68,6 @@ export function PenjokiManajemenPage() {
   const [fNama, setFNama] = useState("");
   const [fWa, setFWa] = useState("");
   const [fTim, setFTim] = useState("");
-  const [fRate, setFRate] = useState("");
   const [fKeahlian, setFKeahlian] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [fKeterangan, setFKeterangan] = useState("");
@@ -106,13 +109,67 @@ export function PenjokiManajemenPage() {
     },
   });
 
-  /** Rate = 70% ulasan (rating_skill) + 30% volume tugas bulan ini. */
-  const rateTampil = (p: PenjokiRow): number =>
-    hitungRate(p.rating_skill, tugasBulanIni?.get(p.id) ?? 0);
+  /**
+   * Rating transaksi bulan ini per penjoki — dasar rate (skala bintang).
+   * Transaksi BATAL tidak ikut; transaksi tanpa rating diabaikan.
+   */
+  const { data: ratingBulanIni } = useQuery({
+    queryKey: ["penjoki-rating-bulan-ini"],
+    queryFn: async (): Promise<Map<string, number[]>> => {
+      const { data, error } = await supabase
+        .from("pesanan")
+        .select("penjoki_id, rating, status")
+        .gte("tanggal", awalBulanIni());
+      if (error) throw error;
+      const m = new Map<string, number[]>();
+      for (const r of data ?? []) {
+        if (r.status === "BATAL" || r.rating == null) continue;
+        const n = Number(r.rating);
+        if (!Number.isFinite(n)) continue;
+        const daftar = m.get(r.penjoki_id) ?? [];
+        daftar.push(n);
+        m.set(r.penjoki_id, daftar);
+      }
+      return m;
+    },
+  });
 
-  /** Belum pernah dinilai & belum pernah ditugaskan → jangan tampilkan angka. */
+  /**
+   * Rate = rata-rata rating transaksi bulan ini; bila belum ada rating
+   * transaksi, pakai rating kualitas dari rekap DOCX (`rating_skill`).
+   */
+  const rateTampil = (p: PenjokiRow): number =>
+    ratePenjoki(ratingBulanIni?.get(p.id) ?? [], p.rating_skill);
+
+  /** Rating penjoki = rata-rata rating transaksi (bukan input manual). */
+  const { data: ratingPerPenjoki } = useQuery({
+    queryKey: ["penjoki-rating-rata"],
+    queryFn: async (): Promise<Map<string, { rata: number; jumlah: number }>> => {
+      const { data, error } = await supabase
+        .from("pesanan")
+        .select("penjoki_id, rating")
+        .not("rating", "is", null);
+      if (error) throw error;
+      const total = new Map<string, { jumlah: number; nilai: number }>();
+      for (const r of data ?? []) {
+        const n = Number(r.rating);
+        if (!Number.isFinite(n)) continue;
+        const cur = total.get(r.penjoki_id) ?? { jumlah: 0, nilai: 0 };
+        cur.jumlah += 1;
+        cur.nilai += n;
+        total.set(r.penjoki_id, cur);
+      }
+      const out = new Map<string, { rata: number; jumlah: number }>();
+      total.forEach((v, k) =>
+        out.set(k, { rata: v.nilai / v.jumlah, jumlah: v.jumlah })
+      );
+      return out;
+    },
+  });
+
+  /** Tidak ada rating transaksi bulan ini DAN tidak ada rating kualitas. */
   const kosongTampil = (p: PenjokiRow): boolean =>
-    belumAdaData(p.rating_skill, tugasBulanIni?.get(p.id) ?? 0);
+    belumAdaData(ratingBulanIni?.get(p.id) ?? [], p.rating_skill);
 
   const { data: admins } = useQuery({
     queryKey: ["admins-data-tim"],
@@ -173,13 +230,7 @@ export function PenjokiManajemenPage() {
   }, [admins]);
 
   /** Nama admin per tim — ditampilkan sebagai "Tim 2 · Naim CS" seperti mockup. */
-  const adminPerTim = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const a of admins ?? []) {
-      if (a.team_id && !m.has(a.team_id)) m.set(a.team_id, a.nama_lengkap);
-    }
-    return m;
-  }, [admins]);
+  const adminPerTim = useMemo(() => petaAdminPerTim(admins ?? []), [admins]);
 
   /** Check apakah user boleh edit penjoki ini */
   const canEdit = (penjoki: PenjokiRow) => {
@@ -200,7 +251,6 @@ export function PenjokiManajemenPage() {
     setFNama("");
     setFWa("");
     setFTim("");
-    setFRate("");
     setFKeahlian([]);
     setTagInput("");
     setFKeterangan("");
@@ -220,7 +270,6 @@ export function PenjokiManajemenPage() {
     setFNama(p.nama);
     setFWa(p.no_hp ?? "");
     setFTim(p.team_id);
-    setFRate(p.rating_skill != null ? String(p.rating_skill) : "");
     setFKeahlian(p.keahlian ?? []);
     setFKeterangan(p.keterangan ?? "");
     setShowForm(true);
@@ -233,18 +282,10 @@ export function PenjokiManajemenPage() {
       if (!nama) throw new Error("Nama wajib diisi.");
       const timFinal = isOwner ? fTim : (profile?.team_id ?? "");
       if (!timFinal) throw new Error("Tim wajib dipilih.");
-      let ratingSkill: number | null = null;
-      if (fRate.trim()) {
-        const n = Number(fRate);
-        if (!Number.isFinite(n) || n < 0 || n > 100)
-          throw new Error("Rating ulasan harus berupa angka 0–100.");
-        ratingSkill = Math.round(n * 10) / 10;
-      }
       const payload = {
         nama,
         no_hp: fWa.trim() || null,
         team_id: timFinal,
-        rating_skill: ratingSkill,
         keahlian: fKeahlian,
         keterangan: fKeterangan.trim() || null,
       };
@@ -545,20 +586,16 @@ export function PenjokiManajemenPage() {
                       </select>
                     </Field>
                     <Field
-                      label="Rating Ulasan (%)"
+                      label="Rating Ulasan (dari transaksi)"
                       hint={KETERANGAN_RATE}
                     >
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step={0.1}
-                        inputMode="decimal"
-                        value={fRate}
-                        onChange={(e) => setFRate(e.target.value)}
-                        className={inputCls}
-                        placeholder="Contoh: 85"
-                      />
+                      <div className="rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-sm font-bold text-text-main">
+                        {editingId && ratingPerPenjoki?.get(editingId)
+                          ? `${labelRating(ratingPerPenjoki.get(editingId)!.rata)} · ${ratingPerPenjoki.get(editingId)!.jumlah} transaksi`
+                          : editing?.rating_skill != null
+                            ? `${labelRating(editing.rating_skill)} · rating kualitas (rekap penjoki)`
+                            : "Belum ada transaksi dinilai"}
+                      </div>
                     </Field>
                   </div>
 
@@ -701,7 +738,7 @@ export function PenjokiManajemenPage() {
                       <th className="px-4 py-3 font-bold">Tim</th>
                       <th className="px-4 py-3 font-bold">Rate</th>
                       <th className="px-4 py-3 font-bold">Status</th>
-                      {!readOnlyGlobal && <th className="px-4 py-3 text-right font-bold">Aksi</th>}
+                      <th className="px-4 py-3 text-right font-bold">Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -744,9 +781,9 @@ export function PenjokiManajemenPage() {
                           ) : (
                             <>
                               <p className="text-[15px] font-extrabold tabular-nums text-text-main">
-                                {rateTampil(p)}%
+                                {formatRate(rateTampil(p))}/5
                               </p>
-                              <RateBar rate={rateTampil(p)} className="mt-1.5 w-24" />
+                              <RateBar rate={rateTampil(p)} skala={5} className="mt-1.5 w-24" />
                             </>
                           )}
                         </td>
@@ -756,33 +793,38 @@ export function PenjokiManajemenPage() {
                             kosong={kosongTampil(p)}
                           />
                         </td>
-                        {!readOnlyGlobal && (
-                          <td className="px-4 py-3">
-                            <div className="flex justify-end gap-1.5">
-                              {canEdit(p) ? (
-                                <>
-                                  <Button variant="ghost" onClick={() => mulaiEdit(p)}>
-                                    <PencilSquareIcon className="h-4 w-4" />
-                                  </Button>
-                                  <Button variant="ghost" onClick={() => toggleAktif.mutate(p)}>
-                                    {p.aktif ? "Nonaktifkan" : "Aktifkan"}
-                                  </Button>
-                                  <Button
-                                    variant="danger"
-                                    onClick={() => {
-                                      setHapusTarget(p);
-                                      setHapusError(null);
-                                    }}
-                                  >
-                                    <TrashIcon className="h-4 w-4" />
-                                  </Button>
-                                </>
-                              ) : (
-                                <span className="text-xs text-text-muted">Tim lain</span>
-                              )}
-                            </div>
-                          </td>
-                        )}
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-1.5">
+                            {canEdit(p) ? (
+                              <>
+                                <Button variant="ghost" onClick={() => mulaiEdit(p)}>
+                                  <PencilSquareIcon className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" onClick={() => toggleAktif.mutate(p)}>
+                                  {p.aktif ? "Nonaktifkan" : "Aktifkan"}
+                                </Button>
+                                <Button
+                                  variant="danger"
+                                  onClick={() => {
+                                    setHapusTarget(p);
+                                    setHapusError(null);
+                                  }}
+                                >
+                                  <TrashIcon className="h-4 w-4" />
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                title="Lihat detail (hanya baca)"
+                                onClick={() => navigate(`/penjoki/manajemen/${p.id}`)}
+                              >
+                                <EyeIcon className="h-4 w-4" />
+                                Lihat
+                              </Button>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -809,68 +851,79 @@ export function PenjokiManajemenPage() {
                 />
               </Card>
             ) : (
-              list.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => canEdit(p) && mulaiEdit(p)}
-                  disabled={!canEdit(p)}
-                  className={`card-premium flex w-full items-start gap-3 rounded-2xl px-4 py-3 text-left transition-colors ${
-                    canEdit(p) ? 'enabled:hover:border-brand-border' : 'opacity-60 cursor-not-allowed'
-                  }`}
-                >
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-brand-border/60 bg-brand/10 text-[11px] font-extrabold text-gold">
-                    {p.nama.slice(0, 2).toUpperCase()}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-bold text-text-main">
-                      {p.nama}
-                    </span>
-                    <span className="block truncate text-[11px] text-text-muted">
-                      {p.no_hp || "Nomor belum diisi"}
-                    </span>
-                    <span className="mt-0.5 block truncate text-[11px] text-text-muted">
-                      {p.team?.nama ?? "-"}
-                      {adminPerTim.get(p.team_id)
-                        ? ` · ${adminPerTim.get(p.team_id)}`
-                        : ""}
-                      {" · "}
-                      {tugasBulanIni?.get(p.id) ?? 0} tugas
-                    </span>
-                    <span className="mt-2 flex items-center justify-between gap-2">
-                      <span className="flex items-center gap-2">
-                        {kosongTampil(p) ? (
-                          <span className="text-[15px] font-extrabold text-text-muted">—</span>
-                        ) : (
-                          <>
-                            <span className="text-[15px] font-extrabold tabular-nums text-text-main">
-                              {rateTampil(p)}%
-                            </span>
-                            <RateBar rate={rateTampil(p)} className="w-20" />
-                          </>
-                        )}
-                      </span>
-                      <StatusKinerjaBadge
-                        rate={rateTampil(p)}
-                        kosong={kosongTampil(p)}
-                      />
-                    </span>
-                  </span>
-                  <span
-                    className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${
-                      p.aktif
-                        ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
-                        : "border-red-400/25 bg-red-400/10 text-danger"
-                    }`}
+              list.map((p) => {
+                const bisaEdit = canEdit(p);
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() =>
+                      bisaEdit
+                        ? mulaiEdit(p)
+                        : navigate(`/penjoki/manajemen/${p.id}`)
+                    }
+                    title={bisaEdit ? "Edit penjoki" : "Lihat detail (hanya baca)"}
+                    aria-label={
+                      bisaEdit ? `Edit ${p.nama}` : `Lihat detail ${p.nama}`
+                    }
+                    className="card-premium flex w-full items-start gap-3 rounded-2xl px-4 py-3 text-left transition-colors hover:border-brand-border"
                   >
-                    {p.aktif ? "Akun aktif" : "Akun nonaktif"}
-                  </span>
-                  {canEdit(p) ? (
-                    <ChevronRightIcon className="h-4 w-4 shrink-0 text-text-muted" />
-                  ) : (
-                    <span className="text-[10px] text-text-muted shrink-0">Tim lain</span>
-                  )}
-                </button>
-              ))
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-brand-border/60 bg-brand/10 text-[11px] font-extrabold text-gold">
+                      {p.nama.slice(0, 2).toUpperCase()}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-bold text-text-main">
+                        {p.nama}
+                      </span>
+                      <span className="block truncate text-[11px] text-text-muted">
+                        {p.no_hp || "Nomor belum diisi"}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11px] text-text-muted">
+                        {p.team?.nama ?? "-"}
+                        {adminPerTim.get(p.team_id)
+                          ? ` · ${adminPerTim.get(p.team_id)}`
+                          : ""}
+                        {" · "}
+                        {tugasBulanIni?.get(p.id) ?? 0} tugas
+                      </span>
+                      <span className="mt-2 flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-2">
+                          {kosongTampil(p) ? (
+                            <span className="text-[15px] font-extrabold text-text-muted">—</span>
+                          ) : (
+                            <>
+                              <span className="text-[15px] font-extrabold tabular-nums text-text-main">
+                                {formatRate(rateTampil(p))}/5
+                              </span>
+                              <RateBar rate={rateTampil(p)} skala={5} className="w-20" />
+                            </>
+                          )}
+                        </span>
+                        <StatusKinerjaBadge
+                          rate={rateTampil(p)}
+                          kosong={kosongTampil(p)}
+                        />
+                      </span>
+                    </span>
+                    <span
+                      className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${
+                        p.aktif
+                          ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300"
+                          : "border-red-400/25 bg-red-400/10 text-danger"
+                      }`}
+                    >
+                      {p.aktif ? "Akun aktif" : "Akun nonaktif"}
+                    </span>
+                    {bisaEdit ? (
+                      <ChevronRightIcon className="h-4 w-4 shrink-0 text-text-muted" />
+                    ) : (
+                      <span className="flex shrink-0 items-center gap-1 text-[10px] font-bold text-text-muted">
+                        <EyeIcon className="h-4 w-4" />
+                        Lihat
+                      </span>
+                    )}
+                  </button>
+                );
+              })
             )}
           </div>
 
@@ -891,8 +944,9 @@ export function PenjokiManajemenPage() {
               i
             </span>
             <p>
-              {KETERANGAN_RATE} Bobot: 70% rating ulasan + 30% volume tugas
-              (8 tugas/bulan = penuh). Tugas batal tidak dihitung.
+              {KETERANGAN_RATE} Bila belum ada transaksi yang dinilai, angka
+              memakai rating kualitas dari rekap penjoki. Tugas batal tidak
+              dihitung.
             </p>
           </div>
 

@@ -12,8 +12,10 @@ import { PesananPage } from "./pages/PesananPage";
 import { TambahPesananPage } from "./pages/TambahPesananPage";
 import { PenjokiPage } from "./pages/PenjokiPage";
 import { PenjokiManajemenPage } from "./pages/PenjokiManajemenPage";
+import { PenjokiDetailPage } from "./pages/PenjokiDetailPage";
 import { StatistikTimPage } from "./pages/StatistikTimPage";
 import { PengaturanPage } from "./pages/PengaturanPage";
+import { DownloadAplikasiPage } from "./pages/DownloadAplikasiPage";
 import { DomainOwnerPage } from "./pages/DomainOwnerPage";
 import { NotifikasiPage } from "./pages/NotifikasiPage";
 
@@ -57,10 +59,13 @@ export const router = createBrowserRouter([
       { path: "/pesanan/baru", element: <RequireTulis><TambahPesananPage /></RequireTulis> },
       { path: "/penjoki", element: <PenjokiPage /> },
       { path: "/penjoki/manajemen", element: <PenjokiManajemenPage /> },
+      // Detail baca-saja untuk penjoki di luar tim admin yang login.
+      { path: "/penjoki/manajemen/:id", element: <PenjokiDetailPage /> },
       { path: "/statistik", element: <StatistikTimPage /> },
       { path: "/domain-owner", element: <DomainOwnerPage /> },
       { path: "/notifikasi", element: <NotifikasiPage /> },
       { path: "/pengaturan", element: <PengaturanPage /> },
+      { path: "/download", element: <DownloadAplikasiPage /> },
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },

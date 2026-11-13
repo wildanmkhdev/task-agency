@@ -1,22 +1,18 @@
-# Aset lokal yang tidak dibutuhkan saat build di Vercel
+# Hanya kirim file yang dibutuhkan build frontend ke Vercel.
+# Data mentah client, media, dokumen, dan script DB tidak boleh ikut ter-upload.
+data/
+docs/
+scripts/
+prisma/
+supabase/
 revisi/
 revisi3/
 revsi baru/
-data/
-docs/
-supabase/
-akun_seed*
-*.pdf
-*.jpeg
-*.jpg
-*.mp4
-*.ogg
-
-# Rahasia lokal (env produksi diatur lewat dashboard Vercel)
-.env
-.env.*
-
-# Hasil build lokal — Vercel melakukan build sendiri
 dist/
 node_modules/
-.tmp/
+.vercel/
+.opencode/
+.env
+.env.*
+akun_seed*
+*.md

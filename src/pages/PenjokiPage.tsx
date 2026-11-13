@@ -15,14 +15,15 @@ import {
   TeamTabs,
   inputCls,
 } from "../components/ui";
-import { KETERANGAN_RATE, belumAdaData, hitungRate } from "../lib/rate";
+import { KETERANGAN_RATE, belumAdaData, formatRate, ratePenjoki } from "../lib/rate";
 import { adaDiTimTampil, timTampil } from "../lib/teams";
 import { MagnifyingGlassIcon } from "../components/icons";
 
 /**
  * Laporan rate keaktifan penjoki (tampilan-saja).
  * CRUD penuh ada di menu "Data Penjoki dan Admin" (/penjoki/manajemen).
- * Rate = 70% ulasan (rating_skill) + 30% volume tugas bulan berjalan.
+ * Rate = rata-rata rating transaksi bulan berjalan (skala bintang 1–5),
+ * fallback ke rating kualitas penjoki bila belum ada transaksi yang dinilai.
  */
 export function PenjokiPage() {
   const { teams, teamFilter, setTeamFilter, applyScope } = useScope();
@@ -40,13 +41,15 @@ export function PenjokiPage() {
     },
   });
 
-  // Pesanan bulan berjalan (untuk hitung rate)
+  // Pesanan bulan berjalan (untuk hitung rate & volume tugas)
   const { data: pesananBulanIni } = useQuery({
     queryKey: ["penjoki-rate", teamFilter],
-    queryFn: async (): Promise<Pick<Pesanan, "penjoki_id" | "status" | "status_bayar">[]> => {
+    queryFn: async (): Promise<
+      Pick<Pesanan, "penjoki_id" | "status" | "status_bayar" | "rating">[]
+    > => {
       let q = supabase
         .from("pesanan")
-        .select("penjoki_id, status, status_bayar")
+        .select("penjoki_id, status, status_bayar, rating")
         .gte("tanggal", awalBulanIni());
       q = applyScope(q as never) as typeof q;
       const { data, error } = await q;
@@ -84,13 +87,30 @@ export function PenjokiPage() {
     },
   });
 
-  /** Rate gabungan: ulasan (rating_skill) + volume tugas bulan berjalan. */
-  const rateOf = (p: PenjokiRow): number =>
-    hitungRate(p.rating_skill, rateMap.get(p.id)?.total ?? 0);
+  /** Rating transaksi bulan ini per penjoki — dasar rate (0–5). */
+  const ratingMap = useMemo(() => {
+    const m = new Map<string, number[]>();
+    for (const p of pesananBulanIni ?? []) {
+      if (p.status === "BATAL" || p.rating == null) continue;
+      const n = Number(p.rating);
+      if (!Number.isFinite(n)) continue;
+      const daftar = m.get(p.penjoki_id) ?? [];
+      daftar.push(n);
+      m.set(p.penjoki_id, daftar);
+    }
+    return m;
+  }, [pesananBulanIni]);
 
-  // Belum dinilai & belum pernah ditugaskan → tampilkan status netral.
+  /**
+   * Rate = rata-rata rating transaksi bulan ini; bila kosong, pakai
+   * rating kualitas penjoki (`rating_skill`) dari rekap DOCX.
+   */
+  const rateOf = (p: PenjokiRow): number =>
+    ratePenjoki(ratingMap.get(p.id) ?? [], p.rating_skill);
+
+  // Tidak ada rating transaksi & tidak ada rating kualitas → status netral.
   const kosongOf = (p: PenjokiRow): boolean =>
-    belumAdaData(p.rating_skill, rateMap.get(p.id)?.total ?? 0);
+    belumAdaData(ratingMap.get(p.id) ?? [], p.rating_skill);
 
   if (isLoading) return <Spinner />;
 
@@ -200,9 +220,9 @@ export function PenjokiPage() {
                       ) : (
                         <>
                           <span className="text-[15px] font-extrabold tabular-nums text-text-main">
-                            {rateOf(p)}%
+                            {formatRate(rateOf(p))}/5
                           </span>
-                          <RateBar rate={rateOf(p)} className="w-24" />
+                          <RateBar rate={rateOf(p)} skala={5} className="w-24" />
                         </>
                       )}
                     </div>
@@ -273,9 +293,9 @@ export function PenjokiPage() {
                         ) : (
                           <>
                             <p className="text-[15px] font-extrabold tabular-nums text-text-main">
-                              {rate}%
+                              {formatRate(rate)}/5
                             </p>
-                            <RateBar rate={rate} className="mt-1.5 w-24" />
+                            <RateBar rate={rate} skala={5} className="mt-1.5 w-24" />
                           </>
                         )}
                         <p className="mt-1 text-[10px] text-text-muted">
@@ -300,9 +320,10 @@ export function PenjokiPage() {
           i
         </span>
         <p>
-          {KETERANGAN_RATE} Bobot: 70% rating ulasan + 30% volume tugas (8
-          tugas/bulan = penuh). Tugas batal tidak dihitung. Penjoki dengan rate
-          tinggi bisa dipertimbangkan membantu tim yang kekurangan tenaga.
+          {KETERANGAN_RATE} Bila penjoki belum punya transaksi yang dinilai
+          bulan ini, angka memakai rating kualitasnya dari rekap penjoki.
+          Tugas batal tidak dihitung. Penjoki dengan rate tinggi bisa
+          dipertimbangkan membantu tim yang kekurangan tenaga.
         </p>
       </div>
     </div>

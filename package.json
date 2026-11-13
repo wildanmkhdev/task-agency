@@ -19,7 +19,12 @@
     "db:cek-excel": "tsx scripts/cek-angka-excel.ts",
     "check": "tsc -b && tsx scripts/check-rate.ts && tsx scripts/check-statistik.ts",
     "check:rate": "tsx scripts/check-rate.ts",
-    "check:statistik": "tsx scripts/check-statistik.ts"
+    "check:statistik": "tsx scripts/check-statistik.ts",
+    "db:backup": "tsx scripts/backup-data.ts",
+    "db:rebuild": "tsx scripts/rebuild-data.ts",
+    "db:verify": "tsx scripts/verify-rebuild.ts",
+    "db:penjoki-docx": "python3 scripts/penjoki-docx.py",
+    "db:laporan-anomali": "tsx scripts/laporan-anomali.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",
@@ -44,7 +49,8 @@
     "tailwindcss": "^4.1.18",
     "tsx": "^4.20.7",
     "typescript": "~5.9.3",
-    "vite": "^7.1.12"
+    "vite": "^7.1.12",
+    "vite-plugin-pwa": "^2.0.0"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

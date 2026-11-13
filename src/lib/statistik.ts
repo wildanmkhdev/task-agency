@@ -6,13 +6,13 @@
  * pendapatan, rata-rata rate, delta bulan sebelumnya) hanya hidup di satu
  * tempat dan bisa diverifikasi tanpa membuka browser.
  */
-import { belumAdaData, hitungRate } from "./rate";
+import { belumAdaData, ratePenjoki } from "./rate";
 import { adaDiTimTampil, timTampil } from "./teams";
 import { masukRekap, type Pesanan, type Penjoki, type Team } from "./types";
 
 export type BarisStatistik = Pick<
   Pesanan,
-  "team_id" | "penjoki_id" | "harga" | "status" | "status_bayar"
+  "kode" | "team_id" | "penjoki_id" | "harga" | "status" | "status_bayar" | "rating"
 >;
 
 export interface RingkasanTim {
@@ -20,7 +20,7 @@ export interface RingkasanTim {
   nama: string;
   transaksi: number;
   pendapatan: number;
-  /** Rata-rata rate penjoki tim; null bila belum ada yang terukur. */
+  /** Rata-rata rate penjoki tim (skala 0–5); null bila belum ada yang terukur. */
   rate: number | null;
 }
 
@@ -50,24 +50,24 @@ export function persenPerubahan(now: number, prev: number): number | null {
 interface Agregat {
   transaksi: Map<string, number>;
   pendapatan: Map<string, number>;
-  tugasPenjoki: Map<string, number>;
+  /** Rating transaksi bulan ini per penjoki — dasar rate (skala 0–5). */
+  ratingPenjoki: Map<string, number[]>;
 }
 
 function agregat(rows: BarisStatistik[]): Agregat {
   const hasil: Agregat = {
     transaksi: new Map(),
     pendapatan: new Map(),
-    tugasPenjoki: new Map(),
+    ratingPenjoki: new Map(),
   };
 
   for (const r of rows) {
-    // Volume tugas (dasar rate) = semua tugas non-BATAL, termasuk yang belum
-    // lunas — sama dengan halaman Laporan.
-    if (r.status !== "BATAL") {
-      hasil.tugasPenjoki.set(
-        r.penjoki_id,
-        (hasil.tugasPenjoki.get(r.penjoki_id) ?? 0) + 1
-      );
+    // Rating transaksi non-BATAL (selesai maupun belum lunas) tetap menilai
+    // kualitas kerja penjoki. Transaksi tanpa rating diabaikan.
+    if (r.status !== "BATAL" && r.rating != null && Number.isFinite(r.rating)) {
+      const daftar = hasil.ratingPenjoki.get(r.penjoki_id) ?? [];
+      daftar.push(Number(r.rating));
+      hasil.ratingPenjoki.set(r.penjoki_id, daftar);
     }
     if (!masukRekap(r)) continue;
     hasil.transaksi.set(r.team_id, (hasil.transaksi.get(r.team_id) ?? 0) + 1);
@@ -80,12 +80,23 @@ function agregat(rows: BarisStatistik[]): Agregat {
   return hasil;
 }
 
-/** Rata-rata rate penjoki yang sudah punya data (yang kosong tidak dinilai). */
-function rataRate(penjoki: Penjoki[], tugas: Map<string, number>): number | null {
+/**
+ * Rata-rata rate penjoki yang sudah punya data.
+ * Rate per penjoki = rata-rata rating transaksi bulan ini, fallback
+ * `rating_skill` (rekap DOCX). Yang benar-benar kosong tidak dinilai.
+ */
+function rataRate(
+  penjoki: Penjoki[],
+  rating: Map<string, number[]>
+): number | null {
   return rata(
     penjoki
-      .filter((p) => !belumAdaData(p.rating_skill, tugas.get(p.id) ?? 0))
-      .map((p) => hitungRate(p.rating_skill, tugas.get(p.id) ?? 0))
+      .map((p) => {
+        const nilai = rating.get(p.id) ?? [];
+        if (belumAdaData(nilai, p.rating_skill)) return null;
+        return ratePenjoki(nilai, p.rating_skill);
+      })
+      .filter((v): v is number => v !== null)
   );
 }
 
@@ -113,7 +124,7 @@ export function hitungStatistikTim({
     pendapatan: kini.pendapatan.get(t.id) ?? 0,
     rate: rataRate(
       penjokiTampil.filter((p) => p.team_id === t.id),
-      kini.tugasPenjoki
+      kini.ratingPenjoki
     ),
   }));
 
@@ -127,8 +138,8 @@ export function hitungStatistikTim({
   const transaksiLalu = rekapLalu.length;
   const pendapatanLalu = rekapLalu.reduce((s, r) => s + r.harga, 0);
 
-  const rateKini = rataRate(penjokiTampil, kini.tugasPenjoki);
-  const rateLalu = rataRate(penjokiTampil, lalu.tugasPenjoki);
+  const rateKini = rataRate(penjokiTampil, kini.ratingPenjoki);
+  const rateLalu = rataRate(penjokiTampil, lalu.ratingPenjoki);
 
   return {
     tim,

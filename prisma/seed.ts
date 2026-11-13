@@ -7,8 +7,8 @@ const prisma = new PrismaClient();
  * Seed data dasar (idempotent — aman dijalankan berulang):
  * 1. Tim: Tim 1..5 + Sosmed (tim khusus admin sosmed, read-only lintas tim)
  * 2. Master jenis tugas
- * 3. 35 penjoki TIM 2–5 — dataset "REKAP DATA PENJOKI JOKITUGASAJA_ID"
- *    (client, 4 Nov 2026). TIM 1 tidak ada di rekap.
+ * 3. 45 penjoki TIM 2–5 — dataset "REKAP DATA PENJOKI JOKITUGASAJA_ID"
+ *    (client, 13 Nov 2026, digenerate scripts/penjoki-docx.py). TIM 1 tidak ada.
  */
 async function main() {
   // 1. Tim

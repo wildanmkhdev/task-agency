@@ -1,10 +1,13 @@
 import { useState, type FormEvent, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useScope } from "../hooks/useScope";
 import { labelJabatan } from "../lib/admin";
 import { Button, Card, Field, inputCls } from "../components/ui";
+import { usePwaInstalled } from "../lib/pwa";
 import {
+  ArrowDownTrayIcon,
   ArrowRightStartOnRectIcon,
   BellIcon,
   ChevronRightIcon,
@@ -48,6 +51,8 @@ function Row({
 export function PengaturanPage() {
   const { profile, session, signOut, refreshProfile } = useAuth();
   const { isOwner } = useScope();
+  const pwaInstalled = usePwaInstalled();
+  const navigate = useNavigate();
 
   const [sheet, setSheet] = useState<Sheet>(null);
 
@@ -153,6 +158,34 @@ export function PengaturanPage() {
           <PencilSquareIcon className="h-4 w-4" />
         </button>
       </div>
+
+      {/* Menu khusus: download / pasang aplikasi */}
+      <button
+        onClick={() => navigate("/download")}
+        className="card-premium flex w-full items-center gap-3.5 rounded-2xl border border-brand-border/50 bg-gradient-to-r from-brand/20 via-surface to-surface p-4 text-left transition-colors hover:border-brand-border"
+      >
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-brand-border/60 bg-brand/20 text-gold">
+          <ArrowDownTrayIcon className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="block text-[13px] font-extrabold text-text-main">
+              Download Aplikasi
+            </span>
+            {pwaInstalled && (
+              <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-300">
+                Terpasang
+              </span>
+            )}
+          </span>
+          <span className="mt-0.5 block text-[11px] leading-snug text-text-muted">
+            {pwaInstalled
+              ? "Sudah terpasang • Ketuk untuk pasang ulang atau lihat petunjuk"
+              : "Pasang Jokitugas Aja di layar utama HP — tanpa buka browser"}
+          </span>
+        </span>
+        <ChevronRightIcon className="h-4 w-4 shrink-0 text-text-muted" />
+      </button>
 
       {/* Menu pengaturan */}
       <Card className="divide-y divide-line-soft overflow-hidden">

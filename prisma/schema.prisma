@@ -107,8 +107,8 @@ model Penjoki {
   noHp   String? @map("no_hp")
   teamId String  @map("team_id") @db.Uuid
   team   Team    @relation(fields: [teamId], references: [id])
-  /// Rate awal manual 0–100 (dari PDF / input form). Dipakai UI sebagai
-  /// fallback bila penjoki belum punya transaksi pada bulan berjalan.
+  /// Rating kualitas manual skala 1–5 (boleh 0,5). `null` = belum dinilai.
+  /// TIDAK dipakai menghitung rate — rate murni dari volume tugas bulan berjalan.
   ratingSkill Float? @map("rating_skill")
   /// Keahlian (mis. "Laporan PKL", "PPT", "Makalah") — multi-tag
   keahlian String[]
@@ -131,8 +131,8 @@ model Pesanan {
   /// Tim pemilik pesanan (dari admin pembuat / pilihan owner) — dasar scoping D1
   teamId String        @map("team_id") @db.Uuid
   team   Team          @relation(fields: [teamId], references: [id])
-  customerId   String     @map("customer_id") @db.Uuid
-  customer     Customer   @relation(fields: [customerId], references: [id])
+  customerId   String?    @map("customer_id") @db.Uuid
+  customer     Customer?  @relation(fields: [customerId], references: [id])
   jenisTugasId String     @map("jenis_tugas_id") @db.Uuid
   jenisTugas   JenisTugas @relation(fields: [jenisTugasId], references: [id])
   penjokiId    String     @map("penjoki_id") @db.Uuid
@@ -150,6 +150,8 @@ model Pesanan {
   /// Jumlah/keterangan, mis. "1 laporan", "3 bab"
   jumlahKeterangan String @map("jumlah_keterangan")
   catatan  String?
+  /// Rating kualitas 1–5 per transaksi (nullable). Rata-ratanya = rating penjoki.
+  rating   Decimal? @db.Decimal(2, 1)
   status   PesananStatus @default(MENUNGU)
   /// Status pembayaran: BELUM / CICIL / LUNAS (dropdown; menggantikan dibayar+fisk)
   statusBayar StatusBayar @default(BELUM) @map("status_bayar")

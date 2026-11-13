@@ -1,11 +1,21 @@
 /**
- * Verifikasi modul rate (revisi A1 — "Belum ada data").
+ * Verifikasi modul rate (revisi 11 Nov 2026 — skala bintang 1–5).
  * Jalankan: npm run check:rate
  *
- * Fokus: perubahan hanya menambah deteksi data kosong; nilai rate & ambang
- * status lama tidak boleh berubah (kompatibilitas dengan data produksi).
+ * Mengunci perilaku:
+ * - rate = rata-rata rating transaksi bulan berjalan (1 desimal, 0–5)
+ * - penjoki tanpa transaksi berating memakai rating kualitas (fallback)
+ * - penjoki tanpa data sama sekali = "belum ada data", bukan 0
+ * - ambang 5 status kinerja versi bintang
  */
-import { belumAdaData, hitungRate, statusKinerja } from "../src/lib/rate";
+import {
+  belumAdaData,
+  formatRate,
+  hitungRate,
+  labelRating,
+  ratePenjoki,
+  statusKinerja,
+} from "../src/lib/rate";
 
 let gagal = 0;
 
@@ -18,23 +28,46 @@ function cek(nama: string, aktual: unknown, harap: unknown) {
   );
 }
 
-// 1. Rate lama tidak berubah (kompatibilitas angka produksi).
-cek("hitungRate(null, 0) = 42 (fallback)", hitungRate(null, 0), 42);
-cek("hitungRate(85, 0) = 59", hitungRate(85, 0), 59);
-cek("hitungRate(null, 8) = 72", hitungRate(null, 8), 72);
+// 1. Rate = rata-rata rating transaksi (0–5, satu desimal).
+cek("hitungRate([]) = 0", hitungRate([]), 0);
+cek("hitungRate([5]) = 5", hitungRate([5]), 5);
+cek("hitungRate([4, 5]) = 4,5", hitungRate([4, 5]), 4.5);
+cek("hitungRate([3, 4, 4]) = 3,7", hitungRate([3, 4, 4]), 3.7);
+cek("hitungRate([2, 3, 4, 5]) = 3,5", hitungRate([2, 3, 4, 5]), 3.5);
 
-// 2. Ambang status kinerja tetap.
-cek("statusKinerja(42)", statusKinerja(42), "kurang");
-cek("statusKinerja(72)", statusKinerja(72), "aktif");
-cek("statusKinerja(39)", statusKinerja(39), "perhatian");
+// 2. Rate penjoki: transaksi dulu, fallback rating kualitas.
+cek("ratePenjoki([], 4) = 4 (fallback)", ratePenjoki([], 4), 4);
+cek("ratePenjoki([], null) = 0", ratePenjoki([], null), 0);
+cek("ratePenjoki([3, 5], 2) = 4 (transaksi menang)", ratePenjoki([3, 5], 2), 4);
+cek("ratePenjoki([], 4.25) = 4,3", ratePenjoki([], 4.25), 4.3);
 
-// 3. Deteksi "belum ada data" hanya untuk kombinasi kosong.
-cek("belumAdaData(null, 0)", belumAdaData(null, 0), true);
-cek("belumAdaData(undefined, 0)", belumAdaData(undefined, 0), true);
-cek("belumAdaData(null, 3) — sudah ditugaskan", belumAdaData(null, 3), false);
-cek("belumAdaData(85, 0) — sudah dinilai", belumAdaData(85, 0), false);
-cek("belumAdaData(0, 0) — dinilai 0", belumAdaData(0, 0), false);
-cek("belumAdaData(null, -2) — nilai negatif dijaga", belumAdaData(null, -2), true);
+// 3. Ambang status kinerja bintang.
+cek("statusKinerja(5)", statusKinerja(5), "sangat");
+cek("statusKinerja(4.5)", statusKinerja(4.5), "sangat");
+cek("statusKinerja(4.4)", statusKinerja(4.4), "baik");
+cek("statusKinerja(3.5)", statusKinerja(3.5), "baik");
+cek("statusKinerja(3.4)", statusKinerja(3.4), "cukup");
+cek("statusKinerja(2.5)", statusKinerja(2.5), "cukup");
+cek("statusKinerja(2.4)", statusKinerja(2.4), "kurang");
+cek("statusKinerja(1.5)", statusKinerja(1.5), "kurang");
+cek("statusKinerja(1.4)", statusKinerja(1.4), "perhatian");
+cek("statusKinerja(0)", statusKinerja(0), "perhatian");
+
+// 4. "Belum ada data" hanya bila tidak ada transaksi berating DAN fallback.
+cek("belumAdaData([], null)", belumAdaData([], null), true);
+cek("belumAdaData([], undefined)", belumAdaData([], undefined), true);
+cek("belumAdaData([], 3) — ada rating kualitas", belumAdaData([], 3), false);
+cek("belumAdaData([5], null) — ada transaksi", belumAdaData([5], null), false);
+
+// 5. Label & format tampilan.
+cek("labelRating(null)", labelRating(null), "Belum dinilai");
+cek("labelRating(undefined)", labelRating(undefined), "Belum dinilai");
+cek("labelRating(4)", labelRating(4), "4/5");
+cek("labelRating(4.5)", labelRating(4.5), "4,5/5");
+cek("labelRating(5)", labelRating(5), "5/5");
+cek("formatRate(4.5)", formatRate(4.5), "4,5");
+cek("formatRate(4)", formatRate(4), "4");
+cek("formatRate(null)", formatRate(null), "—");
 
 console.log(gagal === 0 ? "\nSEMUA CEK LOLOS" : `\n${gagal} CEK GAGAL`);
 process.exit(gagal === 0 ? 0 : 1);

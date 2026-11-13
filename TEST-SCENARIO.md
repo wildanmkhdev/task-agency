@@ -26,7 +26,7 @@
   - ✅ Lihat semua 24 penjoki (lintas tim)
   - Filter tim: Semua, Tim 2, Tim 3, Tim 4, Tim 5 (tanpa Tim 1 dan Sosmed).
   - ✅ Tombol "Tambah Penjoki" visible (karena bisa tambah di timnya)
-  - ❌ Penjoki Tim 1/3/4/5: TIDAK ada tombol edit/hapus, tampil "Tim lain"
+  - ❌ Penjoki Tim 1/3/4/5: TIDAK ada tombol edit/hapus; tersedia tombol "Lihat" (desktop) atau kartu yang bisa diklik (mobile) menuju detail baca-saja.
   - ✅ Penjoki Tim 2 (0 penjoki saat ini): jika ada, ada tombol Edit/Hapus
   - ✅ Klik "Tambah Penjoki" → form muncul, Tim dropdown disabled = Tim 2
 
@@ -34,7 +34,7 @@
 - Login sebagai admin Tim 3
 - Expected:
   - ✅ Lihat semua 24 penjoki
-  - ❌ Penjoki Tim 1/2/4/5: tampil "Tim lain"
+  - ❌ Penjoki Tim 1/2/4/5: hanya tombol "Lihat" / kartu menuju detail baca-saja.
   - ✅ Penjoki Tim 3 (8 penjoki): ada tombol Edit/Hapus/Toggle
   - ✅ Bisa tambah/edit/hapus penjoki Tim 3 aja
 
@@ -43,7 +43,7 @@
 - Expected:
   - ✅ Lihat semua 24 penjoki
   - ❌ TIDAK ada tombol "Tambah Penjoki"
-  - ❌ SEMUA penjoki tampil "Tim lain" (read-only total)
+  - ❌ SEMUA penjoki hanya punya aksi "Lihat" (read-only total)
   - ❌ Tidak bisa edit/hapus apapun
 
 ### Test 5: Informasi Admin CS (Owner dan Admin)
@@ -55,6 +55,17 @@
   - Tim 1 dan Sosmed tetap muncul di informasi admin walaupun disembunyikan dari filter penjoki.
   - Tidak ada panah, tautan, atau tombol navigasi pada kartu admin.
   - Klik nama admin tidak mengubah halaman menjadi rekap harian.
+
+### Test 6: Detail Penjoki Tim Lain (read-only)
+- Login sebagai admin Tim 2 (atau admin Sosmed), lalu buka Data Penjoki dan Admin.
+- Pilih filter Tim 3 (tim lain), klik "Lihat" pada salah satu penjoki (desktop) atau klik kartunya (mobile).
+- Expected:
+  - URL berpindah ke `/penjoki/manajemen/<id>` dan judul halaman menjadi "Detail Penjoki".
+  - Tampil: nama, no. WhatsApp, tim, admin penanggung jawab, status akun, rating ulasan, tugas bulan ini, rate + status kinerja, keahlian, dan keterangan.
+  - Badge "Hanya lihat" tampil; tidak ada tombol Simpan/Nonaktifkan/Hapus.
+  - Kartu penjoki tim sendiri tetap membuka form edit inline (tidak berpindah halaman).
+  - Penjoki tanpa data (rating kosong & 0 tugas) menampilkan "Belum ada data", bukan angka rate.
+  - Owner tetap mendapat aksi Edit/Nonaktifkan/Hapus di daftar.
 
 ## Data Saat Ini
 - Tim 1: 1 penjoki
@@ -78,3 +89,12 @@
 - [x] `pnpm build` lulus TypeScript dan Vite; warning ukuran bundle tetap ada.
 
 Checklist CRUD di atas tetap belum dicentang karena tidak ada uji mutasi/RLS pada sesi perbaikan tampilan ini.
+
+## Verification (2026-11-08) — Detail Penjoki
+- [x] `pnpm build` lulus TypeScript dan Vite.
+- [x] Admin Tim 2 membuka penjoki Tim 3 via "Lihat" (desktop) → `/penjoki/manajemen/<id>`, konten lengkap, tanpa tombol tulis.
+- [x] Admin Tim 2 mengetuk kartu penjoki tim lain (mobile) → halaman detail; kartu tim sendiri tetap membuka form edit inline.
+- [x] Admin Sosmed melihat kolom Aksi berisi "Lihat" dan dapat membuka detail (read-only).
+- [x] Owner tetap melihat aksi Edit/Nonaktifkan/Hapus.
+- [x] Penjoki tanpa data (Dafa) menampilkan "Belum ada data" tanpa error.
+- [x] RLS `penjoki_select`, `pesanan_select_all`, dan `profiles_select_all` = `USING (true)`, sehingga query detail lintas tim lolos tanpa membuka jalur tulis.

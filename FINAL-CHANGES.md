@@ -86,3 +86,50 @@ Perbaikan tab Admin CS tidak mengubah RLS. Izin tulis di atas adalah kontrak mig
 
 ## ⚡ Network Fix
 Pada sesi sebelumnya, host database direct ter-resolve ke IPv6 dan gagal dengan `Network is unreachable`; koneksi pooler port 6543 berhasil. Pemblokiran port 5432 oleh firewall tidak terbukti.
+
+---
+
+## Revisi 2026-11-08 — Detail Penjoki (Read-Only)
+
+### Masalah
+Di tampilan mobile, kartu penjoki dari tim lain tampil `disabled` tanpa aksi apa pun ("Tim lain"), sehingga admin tidak bisa melihat keterangan penjoki tersebut. Admin hanya bisa membuka (edit + lihat seluruh keterangan) penjoki di timnya sendiri.
+
+### Solusi
+- Halaman baru `src/pages/PenjokiDetailPage.tsx` di rute `/penjoki/manajemen/:id`.
+- Isi halaman: nama, no. WhatsApp, tim, admin penanggung jawab, status akun, rating ulasan, tugas bulan ini, rate + status kinerja, keahlian, dan keterangan — sama dengan informasi pada form edit, tetapi tanpa aksi tulis. Badge "Hanya lihat" ditampilkan.
+- Mobile: kartu penjoki tim lain sekarang dapat diketuk → halaman detail. Kartu tim sendiri tetap membuka form edit inline.
+- Desktop: label "Tim lain" diganti tombol **Lihat** (ikon mata) untuk penjoki non-editable.
+- Admin Sosmed: kolom Aksi kini tampil berisi "Lihat" (sebelumnya kolom disembunyikan seluruhnya).
+- Owner tidak berubah: tetap mendapat Edit/Nonaktifkan/Hapus untuk semua tim.
+- Helper `petaAdminPerTim` di `src/lib/admin.ts` dipakai bersama oleh daftar dan halaman detail agar nama admin penanggung jawab konsisten.
+- `RateBar` mendapat prop `full` untuk bar selebar induk di halaman detail (tanpa mengubah tampilan daftar).
+
+### Keamanan
+Halaman ini murni presentasi. RLS tetap menjadi pagar: `penjoki_select`, `pesanan_select_all`, dan `profiles_select_all` memakai `USING (true)` (baca lintas tim), sedangkan INSERT/UPDATE/DELETE tetap dibatasi tim sendiri atau owner. Tidak ada jalur tulis baru.
+
+### Verifikasi
+- `pnpm build` lulus (TypeScript + Vite).
+- Uji browser lokal (Lightpanda) dengan akun admin Tim 2, admin Sosmed, dan owner:
+  - admin Tim 2 + penjoki Tim 3 → detail tampil lengkap, tanpa tombol tulis;
+  - kartu mobile tim lain → navigasi; kartu tim sendiri → form edit inline;
+  - admin Sosmed → kolom Aksi "Lihat" berfungsi;
+  - owner → aksi Edit/Nonaktifkan/Hapus tetap ada;
+  - penjoki tanpa data ("Dafa") → "Belum ada data" tanpa error.
+- Lihat `TEST-SCENARIO.md` Test 6 untuk skenario lengkap.
+
+### File Terkait
+- `src/pages/PenjokiDetailPage.tsx` (baru)
+- `src/pages/PenjokiManajemenPage.tsx`
+- `src/routes.tsx`
+- `src/components/AppLayout.tsx` (judul halaman)
+- `src/components/ui.tsx` (prop `full` pada `RateBar`)
+- `src/lib/admin.ts` (`petaAdminPerTim`)
+
+### Deployment Produksi 2026-11-08
+- Build: `pnpm build` lulus (TypeScript + Vite).
+- Deploy: `vercel deploy --prod --yes`. Percobaan pertama gagal `deploy_failed: fetch failed` (jaringan saat upload); percobaan kedua berhasil.
+- Deployment ID: `dpl_4N4CEzDN5hvqfbYESTJoraht8qcE` — status `Ready`, target `production`, build 24s.
+- URL: https://task-agency-nbpwxsdgl-wildans-projects-ae50d274.vercel.app
+- Alias produksi: https://task-agency.vercel.app
+- Verifikasi produksi (browser): login admin Tim 2 → daftar penjoki Tim 3 menampilkan aksi "Lihat" → detail `Affina Intan Permata` tampil lengkap (rate 84%, rating ulasan 82%, 7 tugas, keahlian, keterangan) dengan badge "Hanya lihat" dan tanpa tombol tulis.
+- Source belum di-commit/push.

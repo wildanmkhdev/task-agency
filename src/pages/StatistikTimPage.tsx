@@ -17,6 +17,7 @@ import { rupiah, yyyyMmDd } from "../lib/format";
 import { geserPeriode, rentangPeriode } from "../lib/periode";
 import { statistikBarLabels } from "../lib/statistik-chart";
 import type { Penjoki } from "../lib/types";
+import { formatRate } from "../lib/rate";
 import {
   hitungStatistikTim,
   type BarisStatistik,
@@ -72,7 +73,7 @@ function DeltaPoin({ value }: { value: number | null }) {
         naik ? "text-emerald-300" : "text-danger"
       }`}
     >
-      {naik ? "↑" : "↓"} {Math.abs(value).toFixed(0)} poin dari bulan lalu
+      {naik ? "↑" : "↓"} {formatRate(Math.abs(value))} poin dari bulan lalu
     </span>
   );
 }
@@ -99,7 +100,7 @@ export function StatistikTimPage() {
     queryFn: async (): Promise<BarisStatistik[]> => {
       const { data, error } = await supabase
         .from("pesanan")
-        .select("team_id, penjoki_id, harga, status, status_bayar")
+        .select("kode, team_id, penjoki_id, harga, status, status_bayar, rating")
         .gte("tanggal", rentang.mulaiIso)
         .lte("tanggal", rentang.selesaiIso);
       if (error) throw error;
@@ -116,7 +117,7 @@ export function StatistikTimPage() {
     queryFn: async (): Promise<BarisStatistik[]> => {
       const { data, error } = await supabase
         .from("pesanan")
-        .select("team_id, penjoki_id, harga, status, status_bayar")
+        .select("kode, team_id, penjoki_id, harga, status, status_bayar, rating")
         .gte("tanggal", rentang.sebelumnya.mulaiIso)
         .lte("tanggal", rentang.sebelumnya.selesaiIso);
       if (error) throw error;
@@ -162,7 +163,7 @@ export function StatistikTimPage() {
     if (metrik === "transaksi")
       return `${t.transaksi.toLocaleString("id-ID")} transaksi`;
     if (metrik === "pendapatan") return rupiah(t.pendapatan);
-    return t.rate === null ? "—" : `${Math.round(t.rate)}%`;
+    return t.rate === null ? "—" : `${formatRate(t.rate)}/5`;
   });
 
   const judulChart =
@@ -191,7 +192,7 @@ export function StatistikTimPage() {
             ? "Transaksi"
             : metrik === "pendapatan"
               ? "Pendapatan"
-              : "Rate (%)",
+              : "Rate (0–5)",
         data: daftarTim.map(nilaiMetrik),
         backgroundColor: daftarTim.map((_, i) => warnaTim[i % warnaTim.length]),
         borderColor: daftarTim.map((_, i) =>
@@ -233,6 +234,7 @@ export function StatistikTimPage() {
     scales: {
       x: {
         beginAtZero: true,
+        ...(metrik === "rate" ? { max: 5 } : {}),
         grid: {
           color: "rgba(21, 84, 70, 0.3)",
         },
@@ -389,8 +391,9 @@ export function StatistikTimPage() {
         <p className="mt-4 rounded-xl border border-line bg-surface-2 px-3 py-2 text-[10px] leading-relaxed text-text-muted">
           Dihitung dari transaksi berstatus <strong>Selesai</strong> dan{" "}
           <strong>Lunas</strong> pada periode ini. Satu transaksi = satu
-          pesanan. Rate memakai rumus 70% ulasan + 30% volume tugas bulan
-          berjalan; penjoki tanpa data tidak ikut dirata-rata.
+          pesanan. Rate = rata-rata rating ulasan transaksi bulan ini (skala
+          1–5); bila belum ada transaksi yang dinilai, dipakai rating kualitas
+          dari rekap penjoki. Penjoki tanpa data tidak ikut dirata-rata.
         </p>
       </Card>
 
@@ -440,7 +443,7 @@ export function StatistikTimPage() {
             </p>
           </div>
           <p className="mt-3 font-display text-xl font-extrabold tabular text-text-main">
-            {total.rate === null ? "—" : `${Math.round(total.rate)}%`}
+            {total.rate === null ? "—" : `${formatRate(total.rate)}/5`}
           </p>
           <div className="mt-1">
             <DeltaPoin value={delta.rate} />

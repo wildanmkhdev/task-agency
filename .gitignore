@@ -46,3 +46,9 @@ revisi/
 akun_seed*
 .vercel
 .env*
+
+# Data mentah client & artefak laporan (berisi data pribadi — jangan di-push)
+data/
+revisi3/
+revsi baru/
+docs/anomali-review-*.xlsx

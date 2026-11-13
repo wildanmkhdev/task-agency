@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { rupiah, yyyyMmDd } from "../lib/format";
 import { masukRekap, type Pesanan, type Profile } from "../lib/types";
-import { alokasiFee, BAGI_HASIL, persen } from "../lib/fee";
+import { alokasiFee, BAGI_HASIL, feeSosmedAkumulasi, persen } from "../lib/fee";
 import {
   jenisAdmin,
   keteranganJabatan,
@@ -43,7 +43,7 @@ function Kotak({
   label: string;
   value: string;
   icon: string;
-  tone?: "gold" | "green" | "blue" | "violet" | "orange";
+  tone?: "gold" | "green" | "blue" | "violet" | "orange" | "teal";
   delta?: { persen: number; naik: boolean };
 }) {
   const tones: Record<string, string> = {
@@ -52,6 +52,7 @@ function Kotak({
     blue: "border-sky-400/25 bg-sky-400/10 text-sky-300",
     violet: "border-fuchsia-400/25 bg-fuchsia-400/10 text-fuchsia-300",
     orange: "border-orange-400/25 bg-orange-400/10 text-orange",
+    teal: "border-teal-400/25 bg-teal-400/10 text-teal-300",
   };
   return (
     <div className="rounded-2xl border border-line bg-surface/80 p-4">
@@ -91,8 +92,10 @@ function Kotak({
  *
  * Revisi client 3 Nov 2026:
  * - Periode harian / mingguan / bulanan.
- * - 6 kartu: Total Transaksi, Total Pendapatan, Fee Penjoki 50%,
- *   Fee Admin CS 23%, Fee Admin Sosmed 7%, Fee Owner 20%.
+ * - 7 kartu: Total Transaksi, Total Pendapatan, Kas 3%, Fee Penjoki 49%,
+ *   Fee Admin CS 22%, Fee Admin Sosmed 6%, Fee Owner 20%.
+ * - Ruangan sosmed (revisi 12 Nov 2026): kartu utama = akumulasi fee
+ *   Admin Sosmed 6% dari pendapatan tiap admin, plus total semua tim & Kas.
  * - Rincian transaksi: No · Penjoki · Jenis Tugas · Nominal (tanpa Fee Tim).
  * - Tombol "Tambah Transaksi" hanya di ruangan akun sendiri.
  * - Admin sosmed: hanya melihat, tidak bisa menambah.
@@ -128,10 +131,10 @@ export function DetailRekapPage() {
   const milikSendiri = Boolean(profile?.id) && profile?.id === adminId;
   const bolehTambah = milikSendiri && !sosmed;
   /**
-   * Ruangan admin sosmed SELALU menampilkan total seluruh tim
-   * (permintaan client): Total Pendapatan + Fee Admin Sosmed 7% dihitung
-   * dari akumulasi semua tim, bukan dari transaksi yang dia buat.
-   * Owner/admin lain yang membuka ruangan Rania melihat angka yang sama.
+   * Ruangan admin sosmed: angka utamanya adalah akumulasi fee 6% dari
+   * pendapatan tiap admin (koreksi client 12 Nov 2026), bukan total
+   * pendapatan kotor. Total seluruh tim tetap tampil sebagai kartu
+   * informasi agar owner bisa membandingkan.
    */
   const ringkasanAgency = sosmed;
 
@@ -147,7 +150,7 @@ export function DetailRekapPage() {
       let q = supabase
         .from("pesanan")
         .select(
-          "id, harga, status, status_bayar, tanggal, dibuat_oleh, jumlah_keterangan, penjoki:penjoki(nama,no_hp), jenis_tugas:jenis_tugas(nama)"
+          "id, kode, harga, status, status_bayar, tanggal, dibuat_oleh, jumlah_keterangan, penjoki:penjoki(nama,no_hp), jenis_tugas:jenis_tugas(nama)"
         )
         .gte("tanggal", rentang.mulaiIso)
         .lte("tanggal", rentang.selesaiIso);
@@ -165,6 +168,11 @@ export function DetailRekapPage() {
   const rekap = (rows ?? []).filter(masukRekap);
   const totalPendapatan = rekap.reduce((s, p) => s + p.harga, 0);
   const fee = alokasiFee(totalPendapatan);
+  /**
+   * Khusus ruangan sosmed: fee 6% diakumulasikan dari pendapatan tiap admin
+   * (koreksi client 12 Nov 2026), bukan 6% dari total pendapatan kotor.
+   */
+  const feeSosmedAkum = feeSosmedAkumulasi(rekap);
 
   // Data pembanding (periode sebelumnya) untuk persentase kenaikan/penurunan
   const rentangPembanding = rentangPeriode(periode, geserPeriode(periode, tanggal, -1));
@@ -179,7 +187,7 @@ export function DetailRekapPage() {
     queryFn: async (): Promise<Pesanan[]> => {
       let q = supabase
         .from("pesanan")
-        .select("id, harga, status, status_bayar, tanggal, dibuat_oleh")
+        .select("id, kode, harga, status, status_bayar, tanggal, dibuat_oleh")
         .gte("tanggal", rentangPembanding.mulaiIso)
         .lte("tanggal", rentangPembanding.selesaiIso);
       if (!ringkasanAgency) q = q.eq("dibuat_oleh", adminId);
@@ -192,6 +200,7 @@ export function DetailRekapPage() {
 
   const rekapPembanding = (rowsPembanding ?? []).filter(masukRekap);
   const totalPendapatanPembanding = rekapPembanding.reduce((s, p) => s + p.harga, 0);
+  const feeSosmedAkumPembanding = feeSosmedAkumulasi(rekapPembanding);
 
   function hitungPersentase(sekarang: number, sebelum: number): { persen: number; naik: boolean } {
     if (sebelum === 0) return { persen: sekarang > 0 ? 100 : 0, naik: sekarang > 0 };
@@ -201,6 +210,7 @@ export function DetailRekapPage() {
 
   const deltaTransaksi = hitungPersentase(rekap.length, rekapPembanding.length);
   const deltaPendapatan = hitungPersentase(totalPendapatan, totalPendapatanPembanding);
+  const deltaFeeSosmed = hitungPersentase(feeSosmedAkum, feeSosmedAkumPembanding);
 
   const rincian: RincianRow[] = useMemo(
     () =>
@@ -311,17 +321,21 @@ export function DetailRekapPage() {
     let yPos = finalY + 20;
     doc.text("Rincian Fee:", 14, yPos);
     yPos += 5;
-    doc.text(`Fee Penjoki (50%)`, 20, yPos);
+    doc.text(`Fee Penjoki (${persen(BAGI_HASIL.penjoki)}%)`, 20, yPos);
     doc.text(rupiah(fee.penjoki), 70, yPos, { align: "right" });
     yPos += 4;
-    doc.text(`Fee Admin CS (23%)`, 20, yPos);
+    doc.text(`Fee Admin CS (${persen(BAGI_HASIL.adminCs)}%)`, 20, yPos);
     doc.text(rupiah(fee.adminCs), 70, yPos, { align: "right" });
     yPos += 4;
-    doc.text(`Fee Admin Sosmed (7%)`, 20, yPos);
+    doc.text(`Fee Admin Sosmed (${persen(BAGI_HASIL.adminSosmed)}%)`, 20, yPos);
     doc.text(rupiah(fee.adminSosmed), 70, yPos, { align: "right" });
     yPos += 4;
-    doc.text(`Fee Owner (20%)`, 20, yPos);
+    doc.text(`Fee Owner (${persen(BAGI_HASIL.owner)}%)`, 20, yPos);
     doc.text(rupiah(fee.owner), 70, yPos, { align: "right" });
+    // Kas ditulis paling bawah: turunan dari total pendapatan (revisi 11 Nov).
+    yPos += 4;
+    doc.text(`Kas (${persen(BAGI_HASIL.kas)}%)`, 20, yPos);
+    doc.text(rupiah(fee.kas), 70, yPos, { align: "right" });
 
     // Footer
     doc.setFontSize(7);
@@ -414,15 +428,22 @@ export function DetailRekapPage() {
     ws.addRow([]);
     ws.addRow([]);
 
-    // Breakdown fee
+    // Breakdown fee — Kas ditulis paling bawah (turunan total pendapatan).
     ws.addRow(["Rincian Fee:"]).font = { bold: true };
-    ws.addRow(["Fee Penjoki (50%)", "", "", "", fee.penjoki]);
-    ws.addRow(["Fee Admin CS (23%)", "", "", "", fee.adminCs]);
-    ws.addRow(["Fee Admin Sosmed (7%)", "", "", "", fee.adminSosmed]);
-    ws.addRow(["Fee Owner (20%)", "", "", "", fee.owner]);
+    const barisFee: [string, number][] = [
+      [`Fee Penjoki (${persen(BAGI_HASIL.penjoki)}%)`, fee.penjoki],
+      [`Fee Admin CS (${persen(BAGI_HASIL.adminCs)}%)`, fee.adminCs],
+      [`Fee Admin Sosmed (${persen(BAGI_HASIL.adminSosmed)}%)`, fee.adminSosmed],
+      [`Fee Owner (${persen(BAGI_HASIL.owner)}%)`, fee.owner],
+      [`Kas (${persen(BAGI_HASIL.kas)}%)`, fee.kas],
+    ];
+    for (const [label, nilai] of barisFee) {
+      ws.addRow([label, "", "", "", nilai]);
+    }
 
     // Format breakdown
-    [ws.lastRow!.number - 3, ws.lastRow!.number - 2, ws.lastRow!.number - 1, ws.lastRow!.number].forEach((rowNum) => {
+    barisFee.forEach((_, i) => {
+      const rowNum = ws.lastRow!.number - (barisFee.length - 1 - i);
       ws.getRow(rowNum).getCell(5).numFmt = "#,##0";
       ws.getRow(rowNum).getCell(5).alignment = { horizontal: "right" };
     });
@@ -532,21 +553,44 @@ export function DetailRekapPage() {
         </button>
       </div>
 
-      {/* Kotak ringkasan */}
+      {/* Kotak ringkasan — Total Pendapatan di atas, Kas 3% di bawahnya
+          (revisi owner 11 Nov 2026). */}
       {sosmed ? (
         <div className="grid grid-cols-2 gap-3">
-          <Kotak label="Total Pendapatan" value={rupiah(totalPendapatan)} icon="Rp" tone="gold" delta={deltaPendapatan} />
+          {/* Pendapatan Rania = akumulasi fee 6% tiap admin (bukan total kotor). */}
+          <div className="col-span-2">
+            <Kotak
+              label={`Fee Admin Sosmed (${persen(BAGI_HASIL.adminSosmed)}%) — akumulasi per admin`}
+              value={rupiah(feeSosmedAkum)}
+              icon="%"
+              tone="violet"
+              delta={deltaFeeSosmed}
+            />
+          </div>
           <Kotak
-            label={`Fee Admin Sosmed (${persen(BAGI_HASIL.adminSosmed)}%)`}
-            value={rupiah(fee.adminSosmed)}
-            icon="%"
-            tone="violet"
+            label="Total Pendapatan Semua Tim"
+            value={rupiah(totalPendapatan)}
+            icon="Rp"
+            tone="gold"
+            delta={deltaPendapatan}
+          />
+          <Kotak
+            label={`Kas (${persen(BAGI_HASIL.kas)}%)`}
+            value={rupiah(fee.kas)}
+            icon="K"
+            tone="teal"
           />
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
           <Kotak label="Total Transaksi" value={String(rekap.length)} icon="#" tone="green" delta={deltaTransaksi} />
           <Kotak label="Total Pendapatan" value={rupiah(totalPendapatan)} icon="Rp" tone="gold" delta={deltaPendapatan} />
+          <Kotak
+            label={`Kas (${persen(BAGI_HASIL.kas)}%)`}
+            value={rupiah(fee.kas)}
+            icon="K"
+            tone="teal"
+          />
           <Kotak
             label={`Fee Penjoki (${persen(BAGI_HASIL.penjoki)}%)`}
             value={rupiah(fee.penjoki)}
@@ -639,27 +683,27 @@ export function DetailRekapPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-line bg-surface-2/60 text-left text-[10px] uppercase tracking-wider text-text-muted">
-                  <th className="px-4 py-2.5 font-bold">No</th>
-                  <th className="px-4 py-2.5 font-bold">Penjoki</th>
-                  <th className="px-4 py-2.5 font-bold">Jenis Tugas</th>
-                  <th className="px-4 py-2.5 text-right font-bold">Nominal</th>
+                <tr className="border-b border-line bg-surface-2/70 text-[10px] uppercase tracking-wider text-text-muted">
+                  <th className="px-3.5 py-2.5 font-bold w-12 text-center">No</th>
+                  <th className="px-3.5 py-2.5 font-bold">Penjoki</th>
+                  <th className="px-3.5 py-2.5 font-bold">Jenis Tugas</th>
+                  <th className="px-3.5 py-2.5 text-right font-bold whitespace-nowrap">Nominal</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-line-soft">
                 {rincian.map((r, i) => (
-                  <tr key={r.id} className="border-b border-line-soft last:border-0 hover:bg-surface-2/50">
-                    <td className="px-4 py-2.5 tabular text-text-muted">{i + 1}</td>
-                    <td className="px-4 py-2.5">
-                      <p className="font-bold text-text-main">{r.penjoki}</p>
+                  <tr key={r.id} className="transition-colors hover:bg-surface-2/40">
+                    <td className="px-3.5 py-2.5 text-center text-xs tabular text-text-muted">{i + 1}</td>
+                    <td className="px-3.5 py-2.5 whitespace-nowrap">
+                      <p className="font-bold text-text-main text-[12px]">{r.penjoki}</p>
                       {r.noHp && (
                         <p className="text-[10px] text-text-muted">{r.noHp}</p>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 text-text-secondary">{r.jenis}</td>
-                    <td className="px-4 py-2.5 text-right font-extrabold text-gold-soft tabular">
+                    <td className="px-3.5 py-2.5 text-xs text-text-secondary whitespace-nowrap">{r.jenis}</td>
+                    <td className="px-3.5 py-2.5 text-right font-extrabold text-gold-soft tabular whitespace-nowrap text-xs">
                       {rupiah(r.nominal)}
                     </td>
                   </tr>
@@ -667,10 +711,10 @@ export function DetailRekapPage() {
               </tbody>
               <tfoot>
                 <tr className="border-t border-line bg-surface-2/40">
-                  <td colSpan={3} className="px-4 py-2.5 text-right text-[11px] font-bold uppercase tracking-wide text-text-muted">
+                  <td colSpan={3} className="px-3.5 py-2.5 text-right text-[11px] font-bold uppercase tracking-wide text-text-muted">
                     Total Pendapatan
                   </td>
-                  <td className="px-4 py-2.5 text-right font-display text-sm font-extrabold text-gold-soft tabular">
+                  <td className="px-3.5 py-2.5 text-right font-display text-sm font-extrabold text-gold-soft tabular whitespace-nowrap">
                     {rupiah(totalPendapatan)}
                   </td>
                 </tr>

@@ -34,7 +34,7 @@ cp .env.example .env
 # 3. Migrasi database (butuh DATABASE_URL Supabase)
 pnpm db:deploy
 
-# 4. Seed data (tim, jenis tugas, 23 penjoki Tim 3/4/5 dari PDF)
+# 4. Seed data (tim, jenis tugas, 45 penjoki Tim 2–5 dari rekap DOCX)
 pnpm db:seed
 
 # 5. Seed akun login → password dicetak + disimpan di akun_seed.txt
@@ -59,7 +59,7 @@ Password acak ada di `akun_seed.txt` (gitignored). **Ganti setelah login pertama
 prisma/
   schema.prisma        # teams, profiles, jenis_tugas, customers, penjoki, pesanan
   migrations/          # termasuk RLS policies (D1) + trigger auto-profile
-  seed.ts              # data dasar + 23 penjoki dari PDF
+  seed.ts              # data dasar + 45 penjoki dari rekap DOCX
 scripts/
   seed-auth.ts         # buat akun OWNER + 5 ADMIN via service role
 src/
@@ -95,21 +95,26 @@ pnpm build           # build produksi (tsc + vite)
 
 ## Sinkronisasi Data Excel
 
-File sumber ada di `data/*.xlsx`. Alur yang dipakai:
+File sumber ada di `data/*.xlsx` (customer/transaksi) dan `data/*.docx` (rekap penjoki). Alur rebuild penuh:
 
 ```bash
-pnpm db:import-november   # impor baris baru sheet "November" (idempoten)
-pnpm db:cleanup-import    # hapus label "[IMPORT] " dari nama customer (dry run dulu)
-pnpm db:koreksi-tanggal   # koreksi 5 tanggal yang nyasar ke bulan lain (idempoten)
-pnpm db:cek-excel         # verifikasi baris + grand total + subtotal fee
+pnpm db:backup            # backup logis seluruh tabel ke ~/backups/agency-tugas/
+pnpm db:rebuild --yes     # hapus pesanan/customer/penjoki lama, impor Sep+Okt + 45 penjoki DOCX
+pnpm db:verify            # invarian: total, fee, status, relasi, penjoki
+pnpm db:cek-excel         # cocokkan baris & total DB vs file Excel
 ```
 
 Catatan:
 
+- **Data November 2026 dibersihkan** atas permintaan owner (14 Nov 2026). Importer default
+  hanya Sep+Okt; jalankan `--dengan-november` bila ingin mengimpor sheet November lagi.
 - Sheet **"Copy of November"** adalah arsip dan **tidak diimpor** (isinya bisa dobel).
 - Grand total **Oktober** di file Excel masih memakai formula lama `=SUM(E3:E538)` sehingga
-  tidak mencakup 5 baris terakhir. Angka yang benar adalah jumlah seluruh baris
-  (**Rp39.731.508**), dan itulah yang dipakai web. Perbaiki formula Excel bila perlu.
+  tidak mencakup 5 baris terakhir. Jumlah seluruh baris = **Rp39.731.500**; footer Excel
+  = **Rp39.355.500**. Rekap aplikasi sengaja mengikuti footer (5 kode di
+  `KODE_DI_LUAR_REKAP`), jadi selisih **Rp376.000** adalah keputusan yang diketahui.
+  Perbaiki formula Excel + kosongkan daftar itu bila ingin memakai total baris penuh.
+- Grand total data aktif (Sep–Okt 2026) = **772 baris · Rp53.884.500**.
 - Semua angka rekap dihitung dari transaksi berstatus **SELESAI + LUNAS**.
 
 > **Catatan Prisma + Supabase**: `prisma migrate dev` memakai *shadow database* yang tidak punya schema `auth`. Untuk migrasi yang menyentuh `auth` (trigger, RLS), edit SQL manual di folder migrasi lalu jalankan **`pnpm db:deploy`**.

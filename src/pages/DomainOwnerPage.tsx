@@ -6,7 +6,7 @@ import { Card, Spinner } from "../components/ui";
 import { PeriodeTabs } from "../components/PeriodeTabs";
 import { rupiah, yyyyMmDd } from "../lib/format";
 import { masukRekap, type Pesanan, type Profile } from "../lib/types";
-import { alokasiFee } from "../lib/fee";
+import { BAGI_HASIL, alokasiFee, persen } from "../lib/fee";
 import { jenisAdmin, nomorTim } from "../lib/admin";
 import { geserPeriode, rentangPeriode, type Periode } from "../lib/periode";
 import {
@@ -29,7 +29,7 @@ function Kotak({
   label: string;
   value: string;
   icon: string;
-  tone?: "gold" | "green" | "blue" | "violet" | "orange";
+  tone?: "gold" | "green" | "blue" | "violet" | "orange" | "teal";
 }) {
   const tones: Record<string, string> = {
     gold: "border-brand-border bg-brand/10 text-gold",
@@ -37,6 +37,7 @@ function Kotak({
     blue: "border-sky-400/25 bg-sky-400/10 text-sky-300",
     violet: "border-fuchsia-400/25 bg-fuchsia-400/10 text-fuchsia-300",
     orange: "border-orange-400/25 bg-orange-400/10 text-orange",
+    teal: "border-teal-400/25 bg-teal-400/10 text-teal-300",
   };
   return (
     <div className="rounded-2xl border border-line bg-surface/80 p-4">
@@ -63,9 +64,10 @@ function Kotak({
  * Satu layar untuk owner, tanpa membuka ruangan admin satu per satu:
  *   • Total Transaksi & Total Pendapatan = angka header Rekap Harian Tim
  *     (akumulasi semua admin).
- *   • Fee Admin 2–5 = Fee Admin CS (23%) dari pendapatan masing-masing tim.
- *   • Fee Admin Sosmed = 7% dari total pendapatan agency.
+ *   • Fee Admin 2–5 = Fee Admin CS (22%) dari pendapatan masing-masing tim.
+ *   • Fee Admin Sosmed = 6% dari total pendapatan agency.
  *   • Fee Owner = 20% dari total pendapatan agency.
+ *   • Kas = 3% dari total pendapatan agency.
  *   • Admin 1 (tim utama) tidak ditampilkan — sesuai permintaan client.
  *   • Label persentase sengaja tidak ditampilkan di halaman ini.
  */
@@ -79,7 +81,7 @@ function RingkasanOwner() {
     queryFn: async (): Promise<Pesanan[]> => {
       const { data, error } = await supabase
         .from("pesanan")
-        .select("id, harga, status, status_bayar, tanggal, dibuat_oleh")
+        .select("id, kode, harga, status, status_bayar, tanggal, dibuat_oleh")
         .gte("tanggal", rentang.mulaiIso)
         .lte("tanggal", rentang.selesaiIso);
       if (error) throw error;
@@ -201,22 +203,33 @@ function RingkasanOwner() {
           icon="Rp"
           tone="gold"
         />
+        <Kotak
+          label={`Kas (${persen(BAGI_HASIL.kas)}%)`}
+          value={rupiah(fee.kas)}
+          icon="K"
+          tone="teal"
+        />
         {kartuAdmin.map((k) => (
           <Kotak
             key={k.nomor}
-            label={`Fee Admin ${k.nomor}`}
+            label={`Fee Admin ${k.nomor} (${persen(BAGI_HASIL.adminCs)}%)`}
             value={rupiah(k.nilai)}
             icon={String(k.nomor)}
             tone="blue"
           />
         ))}
         <Kotak
-          label="Fee Admin Sosmed"
+          label={`Fee Admin Sosmed (${persen(BAGI_HASIL.adminSosmed)}%)`}
           value={rupiah(fee.adminSosmed)}
           icon="S"
           tone="violet"
         />
-        <Kotak label="Fee Owner" value={rupiah(fee.owner)} icon="O" tone="orange" />
+        <Kotak
+          label={`Fee Owner (${persen(BAGI_HASIL.owner)}%)`}
+          value={rupiah(fee.owner)}
+          icon="O"
+          tone="orange"
+        />
       </div>
 
       <p className="px-1 text-center text-[10px] leading-relaxed text-text-muted">

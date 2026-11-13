@@ -94,12 +94,26 @@ export function RateBadge({ rate }: { rate: number | null }) {
 
 /** Bar rate dengan warna mengikuti status kinerja. */
 /** Bar rate tipis dengan tick marks + titik di ujung, mengikuti mockup "ui rate". */
-export function RateBar({ rate, className = "" }: { rate: number; className?: string }) {
-  const width = Math.max(0, Math.min(100, rate));
-  const g = gayaStatus(width);
+export function RateBar({
+  rate,
+  className = "",
+  full = false,
+  skala = 100,
+}: {
+  rate: number;
+  className?: string;
+  /** true = memenuhi lebar induk (dipakai di halaman detail). */
+  full?: boolean;
+  /** Skala maksimum: 100 (persen) atau 5 (bintang). */
+  skala?: number;
+}) {
+  const width = Math.max(0, Math.min(100, (rate / skala) * 100));
+  const g = gayaStatus(rate);
   return (
     <div
-      className={`relative h-1.5 w-20 overflow-hidden rounded-full bg-surface-3 ${className}`}
+      className={`relative h-1.5 ${
+        full ? "w-full" : "w-20"
+      } overflow-hidden rounded-full bg-surface-3 ${className}`}
     >
       <div
         className={`h-full rounded-full bg-gradient-to-r ${g.bar}`}
