@@ -320,8 +320,8 @@ export function PesananPage() {
               <table className="w-full min-w-[860px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-line bg-surface-2/80 text-[10px] uppercase tracking-wider text-text-muted">
-                    {/* No + Tanggal — kolom paling kiri, sticky */}
-                    <th className="sticky left-0 z-20 bg-surface-2 px-3.5 py-2.5 font-bold border-r border-line shadow-[3px_0_6px_-2px_rgba(0,0,0,0.35)] w-[72px]">
+                    {/* No — kolom paling kiri, sticky */}
+                    <th className="sticky left-0 z-20 bg-surface-2 px-3 py-2.5 font-bold border-r border-line shadow-[3px_0_6px_-2px_rgba(0,0,0,0.35)] w-12 text-center">
                       No
                     </th>
                     <th className="px-3.5 py-2.5 font-bold">Tanggal</th>
@@ -343,16 +343,15 @@ export function PesananPage() {
                         key={p.id}
                         className="transition-colors hover:bg-surface-2/40"
                       >
-                        {/* No — sticky kiri */}
-                        <td className="sticky left-0 z-10 bg-surface px-3.5 py-2.5 whitespace-nowrap border-r border-line shadow-[3px_0_6px_-2px_rgba(0,0,0,0.35)] text-center">
-                          <p className="font-display font-bold text-text-main text-[12px]">{idx + 1}</p>
-                          <p className="text-[10px] text-text-muted">{p.kode.slice(-4)}</p>
+                        {/* No — sticky kiri, nomor murni */}
+                        <td className="sticky left-0 z-10 bg-surface px-3 py-2.5 whitespace-nowrap border-r border-line shadow-[3px_0_6px_-2px_rgba(0,0,0,0.35)] text-center">
+                          <span className="font-display font-bold text-text-main text-[12px] tabular">{idx + 1}</span>
                         </td>
 
                         {/* Tanggal */}
                         <td className="px-3.5 py-2.5 whitespace-nowrap">
                           <p className="font-semibold text-text-main text-[12px]">{tanggalPendek(p.tanggal)}</p>
-                          <p className="text-[10px] text-text-muted font-mono">{p.kode.slice(-4)}</p>
+                          <p className="text-[10px] text-text-muted font-mono">{p.kode}</p>
                         </td>
 
                         {/* Penjoki */}
