@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { rupiah, yyyyMmDd } from "../lib/format";
 import { masukRekap, type Pesanan, type Profile } from "../lib/types";
 import { alokasiFee, BAGI_HASIL, feeSosmedAkumulasi, persen } from "../lib/fee";
+import { urutkanTransaksi } from "../lib/urutan";
 import {
   jenisAdmin,
   keteranganJabatan,
@@ -157,7 +158,9 @@ export function DetailRekapPage() {
       // Ruangan admin biasa (dan ruangan admin lain yang dibuka sosmed):
       // hanya transaksi milik admin tersebut.
       if (!ringkasanAgency) q = q.eq("dibuat_oleh", adminId);
-      const { data, error } = await q.order("tanggal", { ascending: true });
+      // Urutan tunggal aplikasi — sama persis dengan halaman Transaksi.
+      // Lihat src/lib/urutan.ts.
+      const { data, error } = await urutkanTransaksi(q);
       if (error) throw error;
       return (data ?? []) as unknown as Pesanan[];
     },
@@ -553,8 +556,8 @@ export function DetailRekapPage() {
         </button>
       </div>
 
-      {/* Kotak ringkasan — Total Pendapatan di atas, Kas 3% di bawahnya
-          (revisi owner 11 Nov 2026). */}
+      {/* Kotak ringkasan — Total Pendapatan di atas (bentang penuh),
+          kartu lain 2 kolom di bawahnya (revisi owner 14 Nov 2026). */}
       {sosmed ? (
         <div className="grid grid-cols-2 gap-3">
           {/* Pendapatan Rania = akumulasi fee 6% tiap admin (bukan total kotor). */}
@@ -583,8 +586,18 @@ export function DetailRekapPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
+          {/* Total Pendapatan di atas, dibentangkan penuh 2 kolom
+              (revisi owner 14 Nov 2026). Sisa 6 kartu mengisi 2 kolom. */}
+          <div className="col-span-2">
+            <Kotak
+              label="Total Pendapatan"
+              value={rupiah(totalPendapatan)}
+              icon="Rp"
+              tone="gold"
+              delta={deltaPendapatan}
+            />
+          </div>
           <Kotak label="Total Transaksi" value={String(rekap.length)} icon="#" tone="green" delta={deltaTransaksi} />
-          <Kotak label="Total Pendapatan" value={rupiah(totalPendapatan)} icon="Rp" tone="gold" delta={deltaPendapatan} />
           <Kotak
             label={`Kas (${persen(BAGI_HASIL.kas)}%)`}
             value={rupiah(fee.kas)}

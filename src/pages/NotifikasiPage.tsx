@@ -2,16 +2,16 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
-import { namaCustomerTampil, rupiah, tanggalWaktu } from "../lib/format";
+import { namaCustomerTampil, rupiah, tanggalWaktu, waktuDb } from "../lib/format";
 import type { Pesanan } from "../lib/types";
 import { BellIcon, ChevronRightIcon } from "../components/icons";
 import { Card, EmptyState, Spinner, StatusBadge } from "../components/ui";
 
 const SELECT =
-  "id, kode, harga, status, status_bayar, tanggal, customer:customers(nama), penjoki:penjoki(nama), team:teams(nama)";
+  "id, kode, harga, status, status_bayar, tanggal, created_at, customer:customers(nama), penjoki:penjoki(nama), team:teams(nama)";
 
 function waktuRelatif(iso: string): string {
-  const selisih = Date.now() - new Date(iso).getTime();
+  const selisih = Date.now() - waktuDb(iso).getTime();
   const menit = Math.floor(selisih / 60000);
   if (menit < 1) return "baru saja";
   if (menit < 60) return `${menit} menit lalu`;
@@ -19,7 +19,7 @@ function waktuRelatif(iso: string): string {
   if (jam < 24) return `${jam} jam lalu`;
   const hari = Math.floor(jam / 24);
   if (hari < 7) return `${hari} hari lalu`;
-  return tanggalWaktu(iso);
+  return tanggalWaktu(waktuDb(iso));
 }
 
 /** Notifikasi — aktivitas transaksi terbaru sebagai pemberitahuan. */
@@ -32,7 +32,7 @@ export function NotifikasiPage() {
       let q = supabase
         .from("pesanan")
         .select(SELECT)
-        .order("tanggal", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(25);
       q = applyScope(q as never) as typeof q;
       const { data, error } = await q;
@@ -83,7 +83,7 @@ export function NotifikasiPage() {
                     {p.customer?.nama ? namaCustomerTampil(p.customer.nama) : "Transaksi"} · {p.kode}
                   </p>
                   <span className="shrink-0 text-[10px] text-text-muted">
-                    {waktuRelatif(p.tanggal)}
+                    {waktuRelatif(p.created_at)}
                   </span>
                 </div>
                 <p className="mt-0.5 truncate text-[11px] text-text-muted">

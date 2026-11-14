@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
@@ -14,6 +14,8 @@ import { PeriodeTabs } from "../components/PeriodeTabs";
 import { geserPeriode, rentangPeriode, type Periode } from "../lib/periode";
 import { timTampil } from "../lib/teams";
 import { belumAdaData, formatRate, ratePenjoki } from "../lib/rate";
+import { invalidateTransaksi } from "../lib/invalidate";
+import { urutkanTransaksi } from "../lib/urutan";
 
 const PESANAN_SELECT =
   "id, kode, harga, fee_admin, fee_owner, fee_penjoki, status, status_bayar, tanggal, jumlah_keterangan, catatan, rating, team_id, penjoki_id, customer:customers(nama), penjoki:penjoki(id, nama, rating_skill), jenis_tugas:jenis_tugas(nama), team:teams(nama)";
@@ -88,22 +90,16 @@ export function PesananPage() {
         .select(PESANAN_SELECT)
         .gte("tanggal", rentang.mulaiIso)
         .lte("tanggal", rentang.selesaiIso)
-        .order("tanggal", { ascending: false })
         .limit(1000);
       q = applyScope(q as never) as typeof q;
-      const { data, error } = await q;
+      // Urutan tunggal aplikasi — lihat src/lib/urutan.ts
+      const { data, error } = await urutkanTransaksi(q);
       if (error) throw error;
       return (data ?? []) as unknown as Pesanan[];
     },
   });
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["pesanan"] });
-    qc.invalidateQueries({ queryKey: ["dashboard-pesanan"] });
-    qc.invalidateQueries({ queryKey: ["rekap"] });
-    qc.invalidateQueries({ queryKey: ["rekap-admin"] });
-    qc.invalidateQueries({ queryKey: ["penjoki-rate"] });
-  };
+  const invalidate = () => invalidateTransaksi(qc);
 
   const update = useMutation({
     mutationFn: async ({
@@ -113,16 +109,34 @@ export function PesananPage() {
       id: string;
       patch: Partial<Pick<Pesanan, "status" | "selesai_at">>;
     }) => {
-      const { error } = await supabase.from("pesanan").update(patch).eq("id", id);
+      const { data: terupdate, error } = await supabase
+        .from("pesanan")
+        .update(patch)
+        .eq("id", id)
+        .select("id");
       if (error) throw error;
+      if (!terupdate || terupdate.length === 0) {
+        throw new Error(
+          "Tidak ada perubahan — transaksi ini bukan milik tim Anda atau Anda tidak punya akses."
+        );
+      }
     },
     onSettled: invalidate,
   });
 
   const hapus = useMutation({
     mutationFn: async (p: Pesanan) => {
-      const { error } = await supabase.from("pesanan").delete().eq("id", p.id);
+      const { data: terhapus, error } = await supabase
+        .from("pesanan")
+        .delete()
+        .eq("id", p.id)
+        .select("id");
       if (error) throw error;
+      if (!terhapus || terhapus.length === 0) {
+        throw new Error(
+          "Transaksi tidak terhapus — bukan milik tim Anda atau Anda tidak punya akses."
+        );
+      }
     },
     onSuccess: () => {
       setHapusTarget(null);
@@ -135,38 +149,21 @@ export function PesananPage() {
   const list = rows ?? [];
 
   /**
-   * Rate penjoki per bulan — sumbernya sama dengan Data Penjoki/Admin:
-   * rata-rata `pesanan.rating` pada bulan transaksi, dengan fallback
+   * Rate penjoki AKUMULASI — sumbernya sama dengan Data Penjoki/Admin:
+   * rata-rata seluruh `pesanan.rating` milik penjoki, dengan fallback
    * `penjoki.rating_skill` (rating kualitas dari rekap DOCX).
    *
-   * Sebelumnya kolom Rating di tabel transaksi membaca `pesanan.rating`
-   * langsung, sehingga hampir semua baris hasil import tampil "—".
+   * Sebelumnya kolom ini menghitung per bulan, sehingga penjoki yang sama
+   * bisa menampilkan angka berbeda di bulan berbeda dan tidak pernah
+   * "menumpuk". Sekarang satu angka per penjoki, konsisten di semua halaman.
    */
-  const bulanTampil = useMemo(
-    () =>
-      [...new Set(list.map((p) => String(p.tanggal).slice(0, 7)))].sort(),
-    [list]
-  );
-
-  const { data: ratingBulanan } = useQuery({
-    queryKey: ["rate-penjoki-transaksi", bulanTampil.join(",")],
-    enabled: bulanTampil.length > 0,
+  const { data: ratingAkumulasi } = useQuery({
+    queryKey: ["rate-penjoki-akumulasi"],
     staleTime: 60_000,
     queryFn: async (): Promise<Map<string, number[]>> => {
-      const awal = `${bulanTampil[0]}-01`;
-      const [tahunAkhir, bulanAkhir] = bulanTampil[bulanTampil.length - 1]
-        .split("-")
-        .map(Number);
-      // Awal bulan setelah bulan terakhir, batas eksklusif.
-      const akhir = new Date(Date.UTC(tahunAkhir, bulanAkhir, 1))
-        .toISOString()
-        .slice(0, 10);
-
       const { data, error } = await supabase
         .from("pesanan")
-        .select("penjoki_id, rating, tanggal, status")
-        .gte("tanggal", awal)
-        .lt("tanggal", akhir)
+        .select("penjoki_id, rating, status")
         .not("rating", "is", null)
         .limit(5000);
       if (error) throw error;
@@ -175,26 +172,23 @@ export function PesananPage() {
       for (const r of data ?? []) {
         if (r.status === "BATAL") continue;
         const nilai = Number(r.rating);
-        if (!Number.isFinite(nilai)) continue;
-        const kunci = `${r.penjoki_id}|${String(r.tanggal).slice(0, 7)}`;
-        const daftar = peta.get(kunci) ?? [];
+        if (!Number.isFinite(nilai) || nilai < 1 || nilai > 5) continue;
+        const daftar = peta.get(r.penjoki_id) ?? [];
         daftar.push(nilai);
-        peta.set(kunci, daftar);
+        peta.set(r.penjoki_id, daftar);
       }
       return peta;
     },
   });
 
-  /** Rate penjoki untuk satu baris transaksi (bulan transaksi tersebut). */
+  /** Rate akumulasi penjoki untuk satu baris transaksi. */
   const rateBaris = (p: Pesanan) => {
-    const nilai =
-      ratingBulanan?.get(`${p.penjoki_id}|${String(p.tanggal).slice(0, 7)}`) ??
-      [];
+    const nilai = ratingAkumulasi?.get(p.penjoki_id) ?? [];
     const fallback = p.penjoki?.rating_skill ?? null;
     return {
       rate: ratePenjoki(nilai, fallback),
       kosong: belumAdaData(nilai, fallback),
-      /** Belum ada rating transaksi bulan itu → angka berasal dari rating kualitas. */
+      /** Belum ada rating transaksi → angka berasal dari rating kualitas. */
       pakaiKualitas: nilai.length === 0 && fallback != null,
     };
   };
@@ -204,8 +198,9 @@ export function PesananPage() {
     !readOnly && (isOwner || p.team_id === profile?.team_id);
 
   const exportColumns: ExportColumn[] = [
-    { key: "kode", label: "Kode" },
+    { key: "no", label: "No" },
     { key: "tanggal", label: "Tanggal", render: (r) => tanggalPendek(String(r.tanggal)) },
+    { key: "kode", label: "Kode" },
     { key: "customer", label: "Customer", render: (r) => String(r.customer) },
     { key: "jenis", label: "Jenis Tugas", render: (r) => String(r.jenis) },
     { key: "penjoki", label: "Penjoki", render: (r) => String(r.penjoki) },
@@ -222,10 +217,11 @@ export function PesananPage() {
     { key: "status", label: "Status", render: (r) => String(r.status) },
   ];
 
-  const exportRows = list.map((p) => {
+  const exportRows = list.map((p, idx) => {
     const fee = hitungFee(p.harga);
     const rate = rateBaris(p);
     return {
+      no: idx + 1,
       kode: p.kode,
       tanggal: p.tanggal,
       customer: namaCustomerTampil(p.customer?.nama),
@@ -321,12 +317,14 @@ export function PesananPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[780px] text-left text-xs">
+              <table className="w-full min-w-[860px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-line bg-surface-2/80 text-[10px] uppercase tracking-wider text-text-muted">
-                    <th className="sticky left-0 z-20 bg-surface-2 px-3.5 py-2.5 font-bold border-r border-line shadow-[3px_0_6px_-2px_rgba(0,0,0,0.35)]">
-                      Kode
+                    {/* No + Tanggal — kolom paling kiri, sticky */}
+                    <th className="sticky left-0 z-20 bg-surface-2 px-3.5 py-2.5 font-bold border-r border-line shadow-[3px_0_6px_-2px_rgba(0,0,0,0.35)] w-[72px]">
+                      No
                     </th>
+                    <th className="px-3.5 py-2.5 font-bold">Tanggal</th>
                     <th className="px-3.5 py-2.5 font-bold">Penjoki</th>
                     <th className="px-3.5 py-2.5 font-bold">Rate Penjoki</th>
                     <th className="px-3.5 py-2.5 font-bold">Tim</th>
@@ -337,7 +335,7 @@ export function PesananPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line-soft">
-                  {list.map((p) => {
+                  {list.map((p, idx) => {
                     const fee = hitungFee(p.harga);
                     const rate = rateBaris(p);
                     return (
@@ -345,10 +343,16 @@ export function PesananPage() {
                         key={p.id}
                         className="transition-colors hover:bg-surface-2/40"
                       >
-                        {/* Kolom Kode: Sticky di kiri saat scroll di mobile */}
-                        <td className="sticky left-0 z-10 bg-surface px-3.5 py-2.5 whitespace-nowrap border-r border-line shadow-[3px_0_6px_-2px_rgba(0,0,0,0.35)]">
-                          <p className="font-display font-bold text-text-main text-[12px]">{p.kode}</p>
-                          <p className="text-[10px] text-text-muted">{tanggalPendek(p.tanggal)}</p>
+                        {/* No — sticky kiri */}
+                        <td className="sticky left-0 z-10 bg-surface px-3.5 py-2.5 whitespace-nowrap border-r border-line shadow-[3px_0_6px_-2px_rgba(0,0,0,0.35)] text-center">
+                          <p className="font-display font-bold text-text-main text-[12px]">{idx + 1}</p>
+                          <p className="text-[10px] text-text-muted">{p.kode.slice(-4)}</p>
+                        </td>
+
+                        {/* Tanggal */}
+                        <td className="px-3.5 py-2.5 whitespace-nowrap">
+                          <p className="font-semibold text-text-main text-[12px]">{tanggalPendek(p.tanggal)}</p>
+                          <p className="text-[10px] text-text-muted font-mono">{p.kode.slice(-4)}</p>
                         </td>
 
                         {/* Penjoki */}
