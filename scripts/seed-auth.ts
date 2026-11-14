@@ -50,7 +50,7 @@ async function main() {
     { email: "admin.tim2@jokitugasaja.id", nama: "Naim CS", role: "ADMIN", teamNama: "Tim 2" },
     { email: "admin.tim3@jokitugasaja.id", nama: "Widya CS", role: "ADMIN", teamNama: "Tim 3" },
     { email: "admin.tim4@jokitugasaja.id", nama: "Vivi CS", role: "ADMIN", teamNama: "Tim 4" },
-    { email: "admin.tim5@jokitugasaja.id", nama: "Annisa CS", role: "ADMIN", teamNama: "Tim 5" },
+    { email: "admin.tim5@jokitugasaja.id", nama: "Anisa CS", role: "ADMIN", teamNama: "Tim 5" },
     { email: "admin.sosmed@jokitugasaja.id", nama: "Rania", role: "ADMIN", teamNama: "Sosmed" },
   ];
 
