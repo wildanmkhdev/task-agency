@@ -114,7 +114,7 @@ cek("tanpa penjoki: rate", tanpaPenjoki.total.rate, null);
 cek("tanpa penjoki: delta rate", tanpaPenjoki.delta.rate, null);
 
 // 8. Exclusion kode Oktober (footer Excel owner).
-cek("KODE_DI_LUAR_REKAP berisi 5 kode", KODE_DI_LUAR_REKAP.size, 5);
+cek("KODE_DI_LUAR_REKAP berisi 4 kode", KODE_DI_LUAR_REKAP.size, 4);
 for (const kode of KODE_DI_LUAR_REKAP) {
   cek(
     `${kode} tidak masuk rekap`,
@@ -125,6 +125,11 @@ for (const kode of KODE_DI_LUAR_REKAP) {
 cek(
   "kode lain tetap masuk rekap",
   masukRekap({ status: "SELESAI", status_bayar: "LUNAS", kode: "TRX-OKT26-0003" }),
+  true
+);
+cek(
+  "TRX-OKT26-0002 masuk rekap (tanggal sudah dibetulkan)",
+  masukRekap({ status: "SELESAI", status_bayar: "LUNAS", kode: "TRX-OKT26-0002" }),
   true
 );
 

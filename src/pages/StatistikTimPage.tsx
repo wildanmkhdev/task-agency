@@ -20,6 +20,8 @@ import type { Penjoki } from "../lib/types";
 import { formatRate } from "../lib/rate";
 import {
   hitungStatistikTim,
+  petaPenilaian,
+  type BarisRating,
   type BarisStatistik,
 } from "../lib/statistik";
 import { Card, EmptyState, Spinner } from "../components/ui";
@@ -137,6 +139,31 @@ export function StatistikTimPage() {
     },
   });
 
+  /**
+   * Rating akumulasi sampai akhir periode → rate tim memakai angka yang
+   * sama dengan halaman Data Penjoki (tidak reset tiap bulan).
+   * Untuk periode berjalan, batas atas ini = seluruh transaksi.
+   */
+  const ambilPenilaian = async (batas: string): Promise<Map<string, number[]>> => {
+    const { data, error } = await supabase
+      .from("pesanan")
+      .select("penjoki_id, rating, status")
+      .not("rating", "is", null)
+      .lte("tanggal", batas);
+    if (error) throw error;
+    return petaPenilaian((data ?? []) as BarisRating[]);
+  };
+
+  const { data: penilaianKini, isLoading: loadingNilai } = useQuery({
+    queryKey: ["statistik-rating-akumulasi", rentang.selesaiIso],
+    queryFn: () => ambilPenilaian(rentang.selesaiIso),
+  });
+
+  const { data: penilaianLalu } = useQuery({
+    queryKey: ["statistik-rating-akumulasi", rentang.sebelumnya.selesaiIso],
+    queryFn: () => ambilPenilaian(rentang.sebelumnya.selesaiIso),
+  });
+
   const statistik = useMemo(
     () =>
       hitungStatistikTim({
@@ -144,11 +171,13 @@ export function StatistikTimPage() {
         pesananLalu: pesananLalu ?? [],
         teams,
         penjoki: penjoki ?? [],
+        penilaianKini,
+        penilaianLalu,
       }),
-    [pesananKini, pesananLalu, teams, penjoki]
+    [pesananKini, pesananLalu, teams, penjoki, penilaianKini, penilaianLalu]
   );
 
-  if (isLoading) return <Spinner label="Memuat statistik tim…" />;
+  if (isLoading || loadingNilai) return <Spinner label="Memuat statistik tim…" />;
 
   const { tim: daftarTim, total, delta } = statistik;
 
@@ -391,9 +420,10 @@ export function StatistikTimPage() {
         <p className="mt-4 rounded-xl border border-line bg-surface-2 px-3 py-2 text-[10px] leading-relaxed text-text-muted">
           Dihitung dari transaksi berstatus <strong>Selesai</strong> dan{" "}
           <strong>Lunas</strong> pada periode ini. Satu transaksi = satu
-          pesanan. Rate = rata-rata rating ulasan transaksi bulan ini (skala
-          1–5); bila belum ada transaksi yang dinilai, dipakai rating kualitas
-          dari rekap penjoki. Penjoki tanpa data tidak ikut dirata-rata.
+          pesanan. Rate = rata-rata rating ulasan AKUMULASI sampai akhir
+          periode ini (skala 1–5); bila belum ada transaksi yang dinilai,
+          dipakai rating kualitas dari rekap penjoki. Penjoki tanpa data tidak
+          ikut dirata-rata.
         </p>
       </Card>
 

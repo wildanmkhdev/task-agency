@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
-import { awalBulanIni } from "../lib/format";
+import { awalBulanDepan, awalBulanIni } from "../lib/format";
 import type { Penjoki as PenjokiRow, Profile } from "../lib/types";
 import {
   jenisAdmin,
@@ -24,6 +24,7 @@ import {
   inputCls,
 } from "../components/ui";
 import { KETERANGAN_RATE, belumAdaData, formatRate, labelRating, ratePenjoki } from "../lib/rate";
+import { invalidatePenjoki } from "../lib/invalidate";
 import { adaDiTimTampil, timTampil } from "../lib/teams";
 import {
   ChevronRightIcon,
@@ -98,7 +99,8 @@ export function PenjokiManajemenPage() {
       const { data, error } = await supabase
         .from("pesanan")
         .select("penjoki_id, status, tanggal")
-        .gte("tanggal", awalBulanIni());
+        .gte("tanggal", awalBulanIni())
+        .lt("tanggal", awalBulanDepan());
       if (error) throw error;
       const m = new Map<string, number>();
       for (const r of data ?? []) {
@@ -110,22 +112,23 @@ export function PenjokiManajemenPage() {
   });
 
   /**
-   * Rating transaksi bulan ini per penjoki — dasar rate (skala bintang).
-   * Transaksi BATAL tidak ikut; transaksi tanpa rating diabaikan.
+   * Rating AKUMULASI per penjoki (seluruh transaksi, bukan bulan ini).
+   * Dasar rate: setiap rating baru menaikkan/menurunkan rata-rata dan
+   * tidak di-reset saat ganti bulan. Transaksi BATAL tidak ikut.
    */
-  const { data: ratingBulanIni } = useQuery({
-    queryKey: ["penjoki-rating-bulan-ini"],
+  const { data: ratingAkumulasi } = useQuery({
+    queryKey: ["penjoki-rating-akumulasi"],
     queryFn: async (): Promise<Map<string, number[]>> => {
       const { data, error } = await supabase
         .from("pesanan")
         .select("penjoki_id, rating, status")
-        .gte("tanggal", awalBulanIni());
+        .not("rating", "is", null);
       if (error) throw error;
       const m = new Map<string, number[]>();
       for (const r of data ?? []) {
         if (r.status === "BATAL" || r.rating == null) continue;
         const n = Number(r.rating);
-        if (!Number.isFinite(n)) continue;
+        if (!Number.isFinite(n) || n < 1 || n > 5) continue;
         const daftar = m.get(r.penjoki_id) ?? [];
         daftar.push(n);
         m.set(r.penjoki_id, daftar);
@@ -135,41 +138,25 @@ export function PenjokiManajemenPage() {
   });
 
   /**
-   * Rate = rata-rata rating transaksi bulan ini; bila belum ada rating
-   * transaksi, pakai rating kualitas dari rekap DOCX (`rating_skill`).
+   * Rate = rata-rata rating akumulasi; bila belum ada satu pun transaksi
+   * dinilai, pakai rating kualitas dari rekap DOCX (`rating_skill`).
    */
   const rateTampil = (p: PenjokiRow): number =>
-    ratePenjoki(ratingBulanIni?.get(p.id) ?? [], p.rating_skill);
+    ratePenjoki(ratingAkumulasi?.get(p.id) ?? [], p.rating_skill);
 
-  /** Rating penjoki = rata-rata rating transaksi (bukan input manual). */
-  const { data: ratingPerPenjoki } = useQuery({
-    queryKey: ["penjoki-rating-rata"],
-    queryFn: async (): Promise<Map<string, { rata: number; jumlah: number }>> => {
-      const { data, error } = await supabase
-        .from("pesanan")
-        .select("penjoki_id, rating")
-        .not("rating", "is", null);
-      if (error) throw error;
-      const total = new Map<string, { jumlah: number; nilai: number }>();
-      for (const r of data ?? []) {
-        const n = Number(r.rating);
-        if (!Number.isFinite(n)) continue;
-        const cur = total.get(r.penjoki_id) ?? { jumlah: 0, nilai: 0 };
-        cur.jumlah += 1;
-        cur.nilai += n;
-        total.set(r.penjoki_id, cur);
-      }
-      const out = new Map<string, { rata: number; jumlah: number }>();
-      total.forEach((v, k) =>
-        out.set(k, { rata: v.nilai / v.jumlah, jumlah: v.jumlah })
-      );
-      return out;
-    },
-  });
+  /** Ringkasan rating akumulasi untuk panel edit (rata-rata + jumlah). */
+  const ringkasanRating = (id: string): { rata: number; jumlah: number } | null => {
+    const nilai = ratingAkumulasi?.get(id) ?? [];
+    if (nilai.length === 0) return null;
+    return {
+      rata: nilai.reduce((a, b) => a + b, 0) / nilai.length,
+      jumlah: nilai.length,
+    };
+  };
 
-  /** Tidak ada rating transaksi bulan ini DAN tidak ada rating kualitas. */
+  /** Tidak ada rating transaksi DAN tidak ada rating kualitas. */
   const kosongTampil = (p: PenjokiRow): boolean =>
-    belumAdaData(ratingBulanIni?.get(p.id) ?? [], p.rating_skill);
+    belumAdaData(ratingAkumulasi?.get(p.id) ?? [], p.rating_skill);
 
   const { data: admins } = useQuery({
     queryKey: ["admins-data-tim"],
@@ -240,9 +227,7 @@ export function PenjokiManajemenPage() {
   };
   // ---- Mutasi ----
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["penjoki-manajemen"] });
-    qc.invalidateQueries({ queryKey: ["penjoki"] });
-    qc.invalidateQueries({ queryKey: ["penjoki-tugas-bulan-ini"] });
+    invalidatePenjoki(qc);
   };
 
   const resetForm = () => {
@@ -590,8 +575,8 @@ export function PenjokiManajemenPage() {
                       hint={KETERANGAN_RATE}
                     >
                       <div className="rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-sm font-bold text-text-main">
-                        {editingId && ratingPerPenjoki?.get(editingId)
-                          ? `${labelRating(ratingPerPenjoki.get(editingId)!.rata)} · ${ratingPerPenjoki.get(editingId)!.jumlah} transaksi`
+                        {editingId && ringkasanRating(editingId)
+                          ? `${labelRating(ringkasanRating(editingId)!.rata)} · ${ringkasanRating(editingId)!.jumlah} transaksi`
                           : editing?.rating_skill != null
                             ? `${labelRating(editing.rating_skill)} · rating kualitas (rekap penjoki)`
                             : "Belum ada transaksi dinilai"}

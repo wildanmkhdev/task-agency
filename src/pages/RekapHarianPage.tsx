@@ -223,13 +223,9 @@ export function RekapHarianPage() {
         </p>
       )}
 
-      {/*
-        3 kotak utama — urutan revisi owner 11 Nov 2026:
-        Total Pendapatan di ATAS, Kas 3% di BAWAHnya.
-        (Sebelumnya Kas berada di atas Total Pendapatan.)
-      */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="col-span-2 card-premium rounded-card p-4 sm:p-5">
+      <div className="space-y-3">
+        {/* Total Pendapatan — full width */}
+        <div className="card-premium rounded-card p-4 sm:p-5">
           <div className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-brand-border bg-brand/15 text-gold">
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
@@ -252,48 +248,51 @@ export function RekapHarianPage() {
           </div>
         </div>
 
-        <div className="card-premium rounded-card p-4 sm:p-5">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-400/25 bg-emerald-400/10 text-emerald-300">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                <path d="M9 11.5 11.5 14 16 9.5" />
-                <circle cx="12" cy="12" r="8" />
-              </svg>
-            </span>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-[11px]">
-              Total Transaksi Selesai
+        {/* Total Transaksi + Kas — dua kolom sejajar */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="card-premium rounded-card p-4 sm:p-5">
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-400/25 bg-emerald-400/10 text-emerald-300">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                  <path d="M9 11.5 11.5 14 16 9.5" />
+                  <circle cx="12" cy="12" r="8" />
+                </svg>
+              </span>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-[11px]">
+                Total Transaksi Selesai
+              </p>
+            </div>
+            <p className="mt-3 font-display text-xl font-extrabold text-text-main tabular sm:text-2xl">
+              {rekapScope.length}
             </p>
+            <div className="mt-1">
+              <Trend
+                value={persenPerubahan(rekapScope.length, rekapScopeSebelumnya.length)}
+                periode={periode}
+              />
+            </div>
           </div>
-          <p className="mt-3 font-display text-xl font-extrabold text-text-main tabular sm:text-2xl">
-            {rekapScope.length}
-          </p>
-          <div className="mt-1">
-            <Trend
-              value={persenPerubahan(rekapScope.length, rekapScopeSebelumnya.length)}
-              periode={periode}
-            />
-          </div>
-        </div>
 
-        <div className="card-premium rounded-card p-4 sm:p-5">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-teal-400/25 bg-teal-400/10 text-teal-300">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                <rect x="3" y="6" width="18" height="13" rx="2.5" />
-                <path d="M3 10h18M16.5 14.5h1.5" />
-              </svg>
-            </span>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-[11px]">
-              Kas ({persen(BAGI_HASIL.kas)}%)
+          <div className="card-premium rounded-card p-4 sm:p-5">
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-teal-400/25 bg-teal-400/10 text-teal-300">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                  <rect x="3" y="6" width="18" height="13" rx="2.5" />
+                  <path d="M3 10h18M16.5 14.5h1.5" />
+                </svg>
+              </span>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-[11px]">
+                Kas ({persen(BAGI_HASIL.kas)}%)
+              </p>
+            </div>
+            <p className="mt-3 font-display text-xl font-extrabold text-teal-300 tabular sm:text-2xl">
+              {rupiah(feeKas)}
             </p>
-          </div>
-          <p className="mt-3 font-display text-xl font-extrabold text-teal-300 tabular sm:text-2xl">
-            {rupiah(feeKas)}
-          </p>
-          <div className="mt-1">
-            <span className="text-[11px] font-semibold text-text-muted">
-              Otomatis dari total pendapatan
-            </span>
+            <div className="mt-1">
+              <span className="text-[11px] font-semibold text-text-muted">
+                Otomatis dari total pendapatan
+              </span>
+            </div>
           </div>
         </div>
       </div>

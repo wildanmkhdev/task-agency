@@ -4,8 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useScope } from "../hooks/useScope";
-import { kodeTransaksi, rupiah, yyyyMmDd } from "../lib/format";
+import { kodeTransaksi, rupiah, tanggalDb, yyyyMmDd } from "../lib/format";
 import { BAGI_HASIL, hitungFee, persen } from "../lib/fee";
+import { invalidateTransaksi } from "../lib/invalidate";
 import type {
   Customer,
   JenisTugas,
@@ -106,8 +107,8 @@ export function TambahPesananPage() {
       if (!Number.isFinite(hargaNum) || hargaNum <= 0) throw new Error("Harga tidak valid.");
       if (!jumlah.trim()) throw new Error("Jumlah/keterangan wajib diisi.");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) throw new Error("Tanggal tidak valid.");
-      // Tengah malam waktu lokal → konsisten dengan filter Rekap Harian (lihat catatan TZ)
-      const tanggalIso = new Date(`${tanggal}T00:00:00`).toISOString();
+      // Tengah malam lokal tanpa konversi zona — lihat catatan `tanggalDb`.
+      const tanggalIso = tanggalDb(tanggal);
 
       // Customer: pilih existing atau buat baru
       let custId = customerId;
@@ -151,9 +152,7 @@ export function TambahPesananPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pesanan"] });
-      qc.invalidateQueries({ queryKey: ["dashboard-pesanan"] });
-      qc.invalidateQueries({ queryKey: ["rekap"] });
+      invalidateTransaksi(qc);
       // Customer baru ikut di-invalidate → muncul di dropdown "Customer lama"
       qc.invalidateQueries({ queryKey: ["customer-form"] });
       navigate("/pesanan");

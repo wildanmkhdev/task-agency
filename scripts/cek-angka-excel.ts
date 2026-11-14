@@ -11,8 +11,10 @@
  *   4. Subtotal fee: Gaji Penjoki 50%, Gaji Admin Sosmed 7%, Owner 20%
  *      (Excel) vs alokasiFee(total) yang dipakai web.
  *   5. Angka menu "Bulanan" yang dilihat pengguna — setelah aturan
- *      `masukRekap` + `KODE_DI_LUAR_REKAP` — vs footer "Total Pendapatan"
- *      di Excel. Inilah angka yang harus sama dengan milik owner.
+ *      `masukRekap` + `KODE_DI_LUAR_REKAP` — terhadap jumlah baris sheet.
+ *      Footer "Total Pendapatan" di Excel hanya dilaporkan sebagai info:
+ *      bila formula footer tidak mencakup semua baris, selisihnya adalah
+ *      masalah Excel, bukan masalah data aplikasi.
  *
  * Sheet "Copy of November" sengaja DIABAIKAN: isinya salinan lama dan tidak
  * diimpor. Kalau ikut dihitung, semua baris November terbaca dobel.
@@ -204,7 +206,7 @@ async function main() {
   const bulanDb = new Map(perBulan.map((b) => [b.bln, { n: Number(b.n), s: Number(b.s) }]));
 
   // Angka yang benar-benar dilihat pengguna: aturan `masukRekap` + daftar
-  // `KODE_DI_LUAR_REKAP` (5 baris Oktober yang dilewatkan footer Excel).
+  // `KODE_DI_LUAR_REKAP` (4 baris Oktober yang dilewatkan footer Excel).
   const barisBulan = await prisma.$queryRaw<
     { kode: string; bln: string; harga: number; status: string; status_bayar: string }[]
   >`
@@ -230,14 +232,27 @@ async function main() {
     );
 
     const app = appBulan.get(bulan) ?? { n: 0, s: 0 };
-    if (target.footer !== null) {
-      const cocokApp = app.s === target.footer;
-      if (!cocokApp) gagal++;
-      const dikecualikan = db.n - app.n;
+    const dikecualikan = barisBulan.filter(
+      (b) => b.bln === bulan && KODE_DI_LUAR_REKAP.has(b.kode)
+    );
+    const nilaiDikecualikan = dikecualikan.reduce(
+      (a, b) => a + Number(b.harga),
+      0
+    );
+    const harapApp = target.total - nilaiDikecualikan;
+    const cocokApp = app.s === harapApp;
+    if (!cocokApp) gagal++;
+    console.log(
+      `     Aplikasi ${app.n} trx · ${rupiah(app.s)} · aturan rekap ` +
+        `${rupiah(harapApp)}  ${cocokApp ? "OK" : "BEDA"}` +
+        (dikecualikan.length > 0
+          ? ` (${dikecualikan.length} baris dikecualikan · ${rupiah(nilaiDikecualikan)})`
+          : "")
+    );
+    if (target.footer !== null && app.s !== target.footer) {
       console.log(
-        `     Aplikasi ${app.n} trx · ${rupiah(app.s)} · footer Excel ` +
-          `${rupiah(target.footer)}  ${cocokApp ? "OK" : "BEDA"}` +
-          (dikecualikan > 0 ? ` (${dikecualikan} baris dikecualikan)` : "")
+        `     ℹ️  Footer Excel ${rupiah(target.footer)} — beda ` +
+          `${rupiah(app.s - target.footer)} (baris di luar formula footer)`
       );
     }
   }

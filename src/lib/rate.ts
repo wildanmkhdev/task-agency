@@ -1,9 +1,11 @@
 /**
- * Rate kinerja penjoki (revisi 11 Nov 2026).
+ * Rate kinerja penjoki (revisi 14 Nov 2026).
  *
- * Rate = rata-rata rating ulasan transaksi bulan berjalan, skala 0–5.
+ * Rate = rata-rata AKUMULASI rating ulasan seluruh transaksi penjoki,
+ * skala 0–5. Tidak di-reset tiap bulan, sehingga angka naik/turun mengikuti
+ * riwayat penilaian transaksinya.
  * - Tugas BATAL tidak dihitung.
- * - Penjoki tanpa transaksi = belum ada data (bukan 0).
+ * - Penjoki tanpa rating transaksi = belum ada data (bukan 0).
  * - Transaksi tanpa rating diabaikan (tidak dihitung dalam rata-rata).
  *
  * Status kinerja bintang:
@@ -19,7 +21,7 @@ export type StatusKinerja = "sangat" | "baik" | "cukup" | "kurang" | "perhatian"
 export const SKALA_RATING_MAKS = 5;
 
 /**
- * Hitung rate 0–5 dari rata-rata rating transaksi bulan berjalan.
+ * Hitung rate 0–5 dari rata-rata rating seluruh transaksi penjoki.
  * `transaksi` = array nilai rating yang sudah difilter (tidak termasuk null/BATAL).
  */
 export function hitungRate(transaksi: number[]): number {
@@ -36,10 +38,11 @@ function adaNilai(n: number | null | undefined): n is number {
 }
 
 /**
- * Rate penjoki = rata-rata rating transaksi bulan berjalan; bila belum ada
- * transaksi yang dinilai, pakai rating kualitas penjoki (`rating_skill`).
+ * Rate penjoki = rata-rata akumulasi rating seluruh transaksinya; bila belum
+ * ada satu pun transaksi yang dinilai, pakai rating kualitas penjoki
+ * (`rating_skill`).
  *
- * Fallback ini yang membuat penjoki tanpa transaksi bulan ini tetap punya
+ * Fallback ini yang membuat penjoki tanpa rating transaksi tetap punya
  * angka dari rekap DOCX owner, bukan 0.
  */
 export function ratePenjoki(
@@ -52,7 +55,7 @@ export function ratePenjoki(
 }
 
 /**
- * Penjoki belum punya dasar penilaian: tidak ada transaksi berating bulan ini
+ * Penjoki belum punya dasar penilaian: tidak ada transaksi berating
  * DAN tidak ada rating kualitas tersimpan.
  */
 export function belumAdaData(
@@ -139,4 +142,4 @@ export function gayaStatus(rate: number): GayaStatus {
 
 /** Deskripsi singkat untuk panel info di bawah daftar. */
 export const KETERANGAN_RATE =
-  "Rate = rata-rata rating ulasan transaksi bulan ini (skala bintang 1–5). Transaksi tanpa rating tidak dihitung.";
+  "Rate = rata-rata rating ulasan seluruh transaksi penjoki (akumulasi, skala bintang 1–5). Transaksi tanpa rating tidak dihitung.";

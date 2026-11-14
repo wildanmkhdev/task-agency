@@ -40,9 +40,9 @@ export interface Penjoki {
   team_id: string;
   /**
    * Rating kualitas 1–5 dari rekap penjoki (DOCX owner). Dipakai sebagai
-   * FALLBACK rate: bila penjoki belum punya transaksi berating bulan ini,
+   * FALLBACK rate: bila penjoki belum punya satu pun transaksi berating,
    * angka rate memakai nilai ini. Sumber utama rate tetap rata-rata
-   * `pesanan.rating` bulan berjalan.
+   * akumulasi `pesanan.rating` seluruh transaksi.
    */
   rating_skill: number | null;
   keahlian: string[] | null;
@@ -70,6 +70,8 @@ export interface Pesanan {
   status_bayar: StatusBayar;
   selesai_at: string | null;
   tanggal: string;
+  /** Waktu input (UTC dari DB) — untuk label relatif seperti "baru saja". */
+  created_at: string;
   dibuat_oleh: string;
   customer?: Customer | null;
   jenis_tugas?: JenisTugas | null;
@@ -80,24 +82,29 @@ export interface Pesanan {
 /**
  * Kode transaksi Oktober yang TIDAK dihitung dalam agregat rekap.
  *
- * Dasar: permintaan owner 11 Nov 2026 — total Oktober di aplikasi harus sama
- * dengan footer sheet "Oktober" di file Excel client (Rp39.355.508).
- * Footer itu memakai `=SUM(E3:E538)` sehingga melewatkan 5 baris:
+ * Dasar: footer sheet "Oktober" di file Excel client memakai
+ * `=SUM(E3:E538)`, sehingga melewatkan 5 baris: baris 2 (transaksi pertama)
+ * dan baris 539–542 (4 baris terakhir, semuanya Tim 4).
  *
- *   TRX-OKT26-0002  Rp88.000   (Excel baris 2)
+ * Revisi 14 Nov 2026 (permintaan owner): baris 2 / `TRX-OKT26-0002`
+ * (Rp88.000) DIMASUKKAN kembali karena kesalahan tanggalnya sudah
+ * dibetulkan di file Excel terbaru. Empat baris terakhir Tim 4 tetap
+ * dikecualikan agar total mengikuti footer:
+ *
  *   TRX-OKT26-0539  Rp80.000   (Excel baris 539)
  *   TRX-OKT26-0540  Rp28.000   (Excel baris 540)
  *   TRX-OKT26-0541  Rp80.000   (Excel baris 541)
  *   TRX-OKT26-0542  Rp100.000  (Excel baris 542)
  *   ─────────────────────────
- *   total dikecualikan Rp376.000
+ *   total dikecualikan Rp288.000
  *
- * Baris TETAP ada di database (histori & rincian transaksi utuh); hanya
- * tidak ikut dijumlahkan. Hapus entri di sini bila owner membetulkan rumus
- * Excel-nya (lihat `scripts/cek-angka-excel.ts`).
+ * Konsekuensi: rekap Oktober di aplikasi = footer (Rp39.355.500) + baris 2
+ * (Rp88.000) = **Rp39.443.500** (537 baris). Baris yang dikecualikan TETAP
+ * ada di database (histori & rincian transaksi utuh); hanya tidak ikut
+ * dijumlahkan. Hapus entri di sini bila owner membetulkan rumus Excel-nya
+ * (lihat `scripts/cek-angka-excel.ts`).
  */
 export const KODE_DI_LUAR_REKAP: ReadonlySet<string> = new Set([
-  "TRX-OKT26-0002",
   "TRX-OKT26-0539",
   "TRX-OKT26-0540",
   "TRX-OKT26-0541",
@@ -110,8 +117,10 @@ export const KODE_DI_LUAR_REKAP: ReadonlySet<string> = new Set([
  * (Sebelumnya: SELESAI + dibayar + fisk — fisk sudah dihapus dari alur.)
  *
  * Revisi 11 Nov 2026: transaksi di `KODE_DI_LUAR_REKAP` dikecualikan agar
- * total Oktober sama dengan footer Excel owner. Pemanggil yang tidak
- * membawa `kode` tetap dihitung (aturan lama).
+ * total Oktober sama dengan footer Excel owner.
+ * Revisi 14 Nov 2026: baris pertama Oktober dimasukkan kembali setelah
+ * tanggalnya dibetulkan; lihat komentar `KODE_DI_LUAR_REKAP`.
+ * Pemanggil yang tidak membawa `kode` tetap dihitung (aturan lama).
  */
 export function masukRekap(
   p: Pick<Pesanan, "status" | "status_bayar"> & { kode?: string | null }

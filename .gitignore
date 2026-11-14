@@ -41,6 +41,8 @@ revisi/
 
 # Aset merek aplikasi (boleh di-commit)
 !src/assets/*.png
+!public/icons/*.png
+!public/favicon.png
 
 # File akun seed (password)
 akun_seed*
@@ -52,3 +54,4 @@ data/
 revisi3/
 revsi baru/
 docs/anomali-review-*.xlsx
+.opencode/

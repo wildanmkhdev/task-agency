@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
-import { awalBulanIni } from "../lib/format";
 import type { Penjoki as PenjokiRow, Profile } from "../lib/types";
 import { petaAdminPerTim } from "../lib/admin";
 import {
@@ -45,42 +44,20 @@ export function PenjokiDetailPage() {
     enabled: Boolean(id),
   });
 
-  // Rating transaksi bulan ini — rate = rata-rata rating (skala bintang).
-  const { data: ratingBulanIni } = useQuery({
-    queryKey: ["penjoki-rating-bulan-ini", id],
+  // Rating AKUMULASI (seluruh transaksi) — dasar rate, tidak di-reset bulan.
+  const { data: ratingAkumulasi } = useQuery({
+    queryKey: ["penjoki-rating-akumulasi-penjoki", id],
     queryFn: async (): Promise<number[]> => {
       const { data, error } = await supabase
         .from("pesanan")
         .select("rating, status")
         .eq("penjoki_id", id)
-        .gte("tanggal", awalBulanIni())
         .not("rating", "is", null);
       if (error) throw error;
       return (data ?? [])
         .filter((r) => r.status !== "BATAL")
         .map((r) => Number(r.rating))
         .filter((n) => Number.isFinite(n) && n >= 1 && n <= 5);
-    },
-    enabled: Boolean(id),
-  });
-
-  // Rating ulasan (semua transaksi) — untuk info "rata-rata dari X transaksi".
-  const { data: ratingUlasan } = useQuery({
-    queryKey: ["penjoki-rating-transaksi", id],
-    queryFn: async (): Promise<{ rata: number | null; jumlah: number }> => {
-      const { data, error } = await supabase
-        .from("pesanan")
-        .select("rating")
-        .eq("penjoki_id", id)
-        .not("rating", "is", null);
-      if (error) throw error;
-      const nilai = (data ?? [])
-        .map((r) => Number(r.rating))
-        .filter((n) => Number.isFinite(n));
-      const rata = nilai.length
-        ? nilai.reduce((a, b) => a + b, 0) / nilai.length
-        : null;
-      return { rata, jumlah: nilai.length };
     },
     enabled: Boolean(id),
   });
@@ -123,11 +100,14 @@ export function PenjokiDetailPage() {
     );
   }
 
-  const ratings = ratingBulanIni ?? [];
+  const ratings = ratingAkumulasi ?? [];
   const rate = ratePenjoki(ratings, penjoki.rating_skill);
   const kosong = belumAdaData(ratings, penjoki.rating_skill);
   /** true = rate memakai rating kualitas karena belum ada transaksi dinilai. */
   const pakaiFallback = ratings.length === 0 && penjoki.rating_skill != null;
+  const rataUlasan = ratings.length
+    ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10
+    : null;
   const admin = adminPerTim.get(penjoki.team_id);
   const keahlian = penjoki.keahlian ?? [];
 
@@ -191,7 +171,7 @@ export function PenjokiDetailPage() {
             <>
               <p className="font-display text-3xl font-extrabold text-text-muted">—</p>
               <p className="mt-1 text-xs text-text-muted">
-                Belum ada rating transaksi bulan ini dan belum ada rating
+                Belum ada satu pun transaksi yang dinilai dan belum ada rating
                 kualitas tersimpan.
               </p>
             </>
@@ -206,8 +186,8 @@ export function PenjokiDetailPage() {
               <RateBar rate={rate} full className="mt-2" skala={5} />
               {pakaiFallback && (
                 <p className="mt-2 text-[11px] text-text-muted">
-                  Belum ada transaksi yang dinilai bulan ini — angka memakai
-                  rating kualitas dari rekap penjoki.
+                  Belum ada transaksi yang dinilai — angka memakai rating
+                  kualitas dari rekap penjoki.
                 </p>
               )}
             </>
@@ -217,10 +197,18 @@ export function PenjokiDetailPage() {
         <dl className="mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-xl border border-line bg-surface-2/60 px-3.5 py-2.5">
             <dt className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
-              Transaksi Bulan Ini
+              Transaksi Dinilai
             </dt>
             <dd className="mt-0.5 text-sm font-extrabold tabular-nums text-text-main">
-              {ratings.length} dengan rating
+              {ratings.length} transaksi
+            </dd>
+          </div>
+          <div className="rounded-xl border border-line bg-surface-2/60 px-3.5 py-2.5">
+            <dt className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
+              Rata-rata Rating
+            </dt>
+            <dd className="mt-0.5 text-sm font-extrabold tabular-nums text-text-main">
+              {labelRating(rataUlasan)}
             </dd>
           </div>
         </dl>
@@ -251,17 +239,17 @@ export function PenjokiDetailPage() {
             tone={penjoki.aktif ? "success" : "danger"}
           />
           <BarisInfo
-            label="Rating Ulasan (Keseluruhan)"
-            value={labelRating(ratingUlasan?.rata)}
-            muted={ratingUlasan?.rata == null}
+            label="Rating Ulasan (Akumulasi)"
+            value={labelRating(rataUlasan)}
+            muted={rataUlasan == null}
           />
           <div className="py-2.5">
             <dt className="text-[10px] font-bold uppercase tracking-wide text-text-muted">
               Statistik Rating
             </dt>
             <dd className="mt-1 text-sm text-text-secondary">
-              {ratingUlasan?.jumlah
-                ? `${ratingUlasan.jumlah} transaksi dinilai (rata-rata ${labelRating(ratingUlasan.rata)})`
+              {ratings.length
+                ? `${ratings.length} transaksi dinilai (rata-rata ${labelRating(rataUlasan)})`
                 : "Belum ada transaksi dinilai"}
             </dd>
           </div>

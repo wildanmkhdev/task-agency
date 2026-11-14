@@ -46,8 +46,8 @@ const ACUAN_BULAN = [
 /** Total acuan seluruh periode. */
 const TOTAL_BARIS = 772;
 const TOTAL_HARGA = 53_884_500;
-/** Penjoki: 45 dari DOCX + 1 nama baru bertanda perlu review. */
-const TOTAL_PENJOKI = 46;
+/** Penjoki: 45 dari DOCX (tidak ada nama perlu review pada data Sep+Okt). */
+const TOTAL_PENJOKI = 45;
 
 async function main(): Promise<void> {
   loadEnv();
@@ -151,7 +151,7 @@ async function main(): Promise<void> {
   const perluReview = await prisma.penjoki.count({
     where: { keterangan: { contains: "Perlu review" } },
   });
-  cek("penjoki bertanda perlu review", perluReview, 1);
+  cek("penjoki bertanda perlu review", perluReview, 0);
 
   console.log(
     gagal === 0

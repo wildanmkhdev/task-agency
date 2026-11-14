@@ -54,10 +54,52 @@ export function yyyyMmDd(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-/** Awal bulan berjalan (ISO) — dasar hitung KPI & rate */
+/**
+ * Nilai untuk kolom `pesanan.tanggal` (TIMESTAMP tanpa timezone).
+ *
+ * JANGAN memakai `new Date(`${tanggal}T00:00:00`).toISOString()`: konversi itu
+ * menggeser tengah malam lokal (WIB, UTC+7) menjadi 17:00 UTC hari sebelumnya.
+ * Supabase mengembalikan timestamp tanpa zona apa adanya (mis.
+ * "2026-10-10T17:00:00"), lalu browser membacanya sebagai waktu lokal →
+ * tanggal tampil mundur sehari. Kirim string polos agar simpan-baca tetap di
+ * tanggal yang sama. Filter rekap tetap benar karena batas query memakai
+ * tengah malam lokal yang dikonversi ke UTC.
+ */
+export function tanggalDb(tanggal: string): string {
+  return `${tanggal}T00:00:00`;
+}
+
+/**
+ * Parse timestamp instant dari database (`created_at`, `updated_at`,
+ * `selesai_at`). Kolom-kolom itu TIMESTAMP tanpa zona dan menyimpan UTC;
+ * Supabase mengembalikannya tanpa `Z`. Kalau di-parse langsung, browser
+ * menganggapnya waktu lokal (WIB) sehingga tampil 7 jam lebih awal.
+ * Helper ini menambahkan `Z` bila zona belum ada.
+ *
+ * JANGAN dipakai untuk kolom `tanggal` — itu tanggal lokal tanpa jam.
+ */
+export function waktuDb(iso: string | Date): Date {
+  if (iso instanceof Date) return iso;
+  const sudahAdaZona = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(iso);
+  return new Date(sudahAdaZona ? iso : `${iso}Z`);
+}
+
+/** Awal bulan berjalan (tanggal lokal, `YYYY-MM-DD`).
+ *
+ * Kolom `pesanan.tanggal` menyimpan tengah malam waktu lokal tanpa zona.
+ * JANGAN pakai `toISOString()` di sini: di WIB hasilnya bergeser 7 jam
+ * (mis. `2026-10-31T17:00:00Z`), sehingga batas bulan tidak lagi bulat.
+ */
 export function awalBulanIni(): string {
   const n = new Date();
-  return new Date(n.getFullYear(), n.getMonth(), 1).toISOString();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+/** Awal bulan berikutnya (`YYYY-MM-DD`) — batas eksklusif "bulan berjalan". */
+export function awalBulanDepan(): string {
+  const n = new Date();
+  const d = new Date(n.getFullYear(), n.getMonth() + 1, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
 /** Kode transaksi tampilan: TRX-20261101-XXXX */

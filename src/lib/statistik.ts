@@ -15,6 +15,9 @@ export type BarisStatistik = Pick<
   "kode" | "team_id" | "penjoki_id" | "harga" | "status" | "status_bayar" | "rating"
 >;
 
+/** Satu baris rating untuk agregasi akumulasi rate. */
+export type BarisRating = Pick<Pesanan, "penjoki_id" | "rating" | "status">;
+
 export interface RingkasanTim {
   id: string;
   nama: string;
@@ -50,7 +53,8 @@ export function persenPerubahan(now: number, prev: number): number | null {
 interface Agregat {
   transaksi: Map<string, number>;
   pendapatan: Map<string, number>;
-  /** Rating transaksi bulan ini per penjoki — dasar rate (skala 0–5). */
+  /** Rating transaksi di dalam periode per penjoki (cadangan bila peta
+   *  akumulasi tidak diberikan). Skala 0–5. */
   ratingPenjoki: Map<string, number[]>;
 }
 
@@ -82,8 +86,9 @@ function agregat(rows: BarisStatistik[]): Agregat {
 
 /**
  * Rata-rata rate penjoki yang sudah punya data.
- * Rate per penjoki = rata-rata rating transaksi bulan ini, fallback
- * `rating_skill` (rekap DOCX). Yang benar-benar kosong tidak dinilai.
+ * Rate per penjoki = rata-rata rating AKUMULASI (atau rating periode bila
+ * peta akumulasi tidak diberikan), fallback `rating_skill` (rekap DOCX).
+ * Yang benar-benar kosong tidak dinilai.
  */
 function rataRate(
   penjoki: Penjoki[],
@@ -100,19 +105,49 @@ function rataRate(
   );
 }
 
+/**
+ * Ubah baris rating menjadi peta `penjoki_id → daftar nilai`.
+ * Dipakai untuk rate AKUMULASI (semua transaksi sampai batas tanggal).
+ * BATAL, kosong, dan nilai di luar 1–5 diabaikan.
+ */
+export function petaPenilaian(rows: BarisRating[]): Map<string, number[]> {
+  const peta = new Map<string, number[]>();
+  for (const r of rows) {
+    if (r.status === "BATAL" || r.rating == null) continue;
+    const n = Number(r.rating);
+    if (!Number.isFinite(n) || n < 1 || n > 5) continue;
+    const daftar = peta.get(r.penjoki_id) ?? [];
+    daftar.push(n);
+    peta.set(r.penjoki_id, daftar);
+  }
+  return peta;
+}
+
 export function hitungStatistikTim({
   pesananKini,
   pesananLalu,
   teams,
   penjoki,
+  penilaianKini,
+  penilaianLalu,
 }: {
   pesananKini: BarisStatistik[];
   pesananLalu: BarisStatistik[];
   teams: Team[];
   penjoki: Penjoki[];
+  /**
+   * Rating AKUMULASI per penjoki sampai akhir periode (opsional).
+   * Bila diisi, rate memakai peta ini — konsisten dengan halaman Data
+   * Penjoki. Bila kosong, dipakai rating di dalam periode saja.
+   */
+  penilaianKini?: Map<string, number[]>;
+  penilaianLalu?: Map<string, number[]>;
 }): HasilStatistik {
   const kini = agregat(pesananKini);
   const lalu = agregat(pesananLalu);
+
+  const ratingKini = penilaianKini ?? kini.ratingPenjoki;
+  const ratingLalu = penilaianLalu ?? lalu.ratingPenjoki;
 
   // Tim 1 & Sosmed disembunyikan — aturan yang sama dengan daftar penjoki.
   const penjokiTampil = penjoki.filter(adaDiTimTampil);
@@ -124,7 +159,7 @@ export function hitungStatistikTim({
     pendapatan: kini.pendapatan.get(t.id) ?? 0,
     rate: rataRate(
       penjokiTampil.filter((p) => p.team_id === t.id),
-      kini.ratingPenjoki
+      ratingKini
     ),
   }));
 
@@ -138,8 +173,8 @@ export function hitungStatistikTim({
   const transaksiLalu = rekapLalu.length;
   const pendapatanLalu = rekapLalu.reduce((s, r) => s + r.harga, 0);
 
-  const rateKini = rataRate(penjokiTampil, kini.ratingPenjoki);
-  const rateLalu = rataRate(penjokiTampil, lalu.ratingPenjoki);
+  const rateKini = rataRate(penjokiTampil, ratingKini);
+  const rateLalu = rataRate(penjokiTampil, ratingLalu);
 
   return {
     tim,

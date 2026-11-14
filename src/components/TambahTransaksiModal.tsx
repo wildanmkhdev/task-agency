@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
-import { kodeTransaksi, rupiah, yyyyMmDd } from "../lib/format";
+import { kodeTransaksi, rupiah, tanggalDb, yyyyMmDd } from "../lib/format";
 import { BAGI_HASIL, hitungFee, persen } from "../lib/fee";
+import { invalidateTransaksi } from "../lib/invalidate";
 import type { JenisTugas, Penjoki, Pesanan, Profile } from "../lib/types";
 import { Button, Field, inputCls } from "./ui";
 
@@ -144,7 +145,8 @@ export function TambahTransaksiModal({
         throw new Error("Tanggal tidak valid.");
 
       const fee = hitungFee(nominalNum);
-      const tanggalIso = new Date(`${tanggal}T00:00:00`).toISOString();
+      // Tengah malam lokal tanpa konversi zona — lihat catatan `tanggalDb`.
+      const tanggalIso = tanggalDb(tanggal);
       const ratingNum = rating === "" ? null : Number(rating);
       if (ratingNum !== null && (!Number.isFinite(ratingNum) || ratingNum < 1 || ratingNum > 5))
         throw new Error("Rating harus antara 1 sampai 5.");
@@ -164,11 +166,24 @@ export function TambahTransaksiModal({
 
       if (pesanan) {
         // Mode edit: kode, status, dan status bayar tidak diubah.
-        const { error } = await supabase
+        // Cek izin lebih awal supaya tidak "sukses palsu" (RLS menolak
+        // UPDATE lintas tim dengan 0 baris tanpa error).
+        if (!isOwner && pesanan.team_id !== admin.team_id) {
+          throw new Error(
+            "Transaksi ini milik tim lain. Admin hanya bisa mengubah transaksi timnya sendiri; hubungi owner."
+          );
+        }
+        const { data: terupdate, error } = await supabase
           .from("pesanan")
           .update(payload)
-          .eq("id", pesanan.id);
+          .eq("id", pesanan.id)
+          .select("id");
         if (error) throw error;
+        if (!terupdate || terupdate.length === 0) {
+          throw new Error(
+            "Perubahan tidak tersimpan — Anda tidak punya akses ke transaksi ini (kemungkinan milik tim lain)."
+          );
+        }
         return;
       }
 
@@ -185,15 +200,9 @@ export function TambahTransaksiModal({
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["rekap"] });
-      qc.invalidateQueries({ queryKey: ["rekap-admin"] });
-      qc.invalidateQueries({ queryKey: ["rekap-admin-pembanding"] });
-      qc.invalidateQueries({ queryKey: ["pesanan"] });
-      qc.invalidateQueries({ queryKey: ["dashboard-pesanan"] });
-      qc.invalidateQueries({ queryKey: ["penjoki-rate"] });
-      qc.invalidateQueries({ queryKey: ["penjoki-tugas-bulan-ini"] });
-      qc.invalidateQueries({ queryKey: ["penjoki-rating-rata"] });
-      qc.invalidateQueries({ queryKey: ["jenis-tugas"] });
+      // Satu sumber daftar cache — rating penjoki ikut disegarkan supaya
+      // angka rate langsung naik/turun setelah transaksi dinilai/diubah.
+      invalidateTransaksi(qc);
       onClose();
     },
     onError: (e) => setError((e as Error).message),

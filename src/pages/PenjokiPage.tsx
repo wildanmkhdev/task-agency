@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import { useScope } from "../hooks/useScope";
-import { awalBulanIni } from "../lib/format";
+import { awalBulanDepan, awalBulanIni } from "../lib/format";
 import type { Pesanan, Penjoki as PenjokiRow } from "../lib/types";
 import {
   Button,
@@ -22,8 +22,8 @@ import { MagnifyingGlassIcon } from "../components/icons";
 /**
  * Laporan rate keaktifan penjoki (tampilan-saja).
  * CRUD penuh ada di menu "Data Penjoki dan Admin" (/penjoki/manajemen).
- * Rate = rata-rata rating transaksi bulan berjalan (skala bintang 1–5),
- * fallback ke rating kualitas penjoki bila belum ada transaksi yang dinilai.
+ * Rate = rata-rata AKUMULASI rating seluruh transaksi penjoki (skala
+ * bintang 1–5), fallback ke rating kualitas bila belum ada yang dinilai.
  */
 export function PenjokiPage() {
   const { teams, teamFilter, setTeamFilter, applyScope } = useScope();
@@ -41,20 +41,49 @@ export function PenjokiPage() {
     },
   });
 
-  // Pesanan bulan berjalan (untuk hitung rate & volume tugas)
+  // Pesanan bulan berjalan — untuk volume tugas ("x/y bulan ini").
   const { data: pesananBulanIni } = useQuery({
     queryKey: ["penjoki-rate", teamFilter],
     queryFn: async (): Promise<
-      Pick<Pesanan, "penjoki_id" | "status" | "status_bayar" | "rating">[]
+      Pick<Pesanan, "penjoki_id" | "status" | "status_bayar">[]
     > => {
       let q = supabase
         .from("pesanan")
-        .select("penjoki_id, status, status_bayar, rating")
-        .gte("tanggal", awalBulanIni());
+        .select("penjoki_id, status, status_bayar")
+        .gte("tanggal", awalBulanIni())
+        .lt("tanggal", awalBulanDepan());
       q = applyScope(q as never) as typeof q;
       const { data, error } = await q;
       if (error) throw error;
       return data ?? [];
+    },
+  });
+
+  /**
+   * Rating AKUMULASI per penjoki (seluruh transaksi, bukan bulan ini).
+   * Inilah dasar rate: setiap rating baru langsung menaikkan/menurunkan
+   * rata-rata, dan tidak di-reset saat ganti bulan.
+   */
+  const { data: ratingAkumulasi } = useQuery({
+    queryKey: ["penjoki-rating-akumulasi", teamFilter],
+    queryFn: async (): Promise<Map<string, number[]>> => {
+      let q = supabase
+        .from("pesanan")
+        .select("penjoki_id, rating, status")
+        .not("rating", "is", null);
+      q = applyScope(q as never) as typeof q;
+      const { data, error } = await q;
+      if (error) throw error;
+      const m = new Map<string, number[]>();
+      for (const r of data ?? []) {
+        if (r.status === "BATAL" || r.rating == null) continue;
+        const n = Number(r.rating);
+        if (!Number.isFinite(n) || n < 1 || n > 5) continue;
+        const daftar = m.get(r.penjoki_id) ?? [];
+        daftar.push(n);
+        m.set(r.penjoki_id, daftar);
+      }
+      return m;
     },
   });
 
@@ -87,30 +116,13 @@ export function PenjokiPage() {
     },
   });
 
-  /** Rating transaksi bulan ini per penjoki — dasar rate (0–5). */
-  const ratingMap = useMemo(() => {
-    const m = new Map<string, number[]>();
-    for (const p of pesananBulanIni ?? []) {
-      if (p.status === "BATAL" || p.rating == null) continue;
-      const n = Number(p.rating);
-      if (!Number.isFinite(n)) continue;
-      const daftar = m.get(p.penjoki_id) ?? [];
-      daftar.push(n);
-      m.set(p.penjoki_id, daftar);
-    }
-    return m;
-  }, [pesananBulanIni]);
-
-  /**
-   * Rate = rata-rata rating transaksi bulan ini; bila kosong, pakai
-   * rating kualitas penjoki (`rating_skill`) dari rekap DOCX.
-   */
+  /** Rate = rata-rata rating akumulasi; bila kosong, pakai rating kualitas. */
   const rateOf = (p: PenjokiRow): number =>
-    ratePenjoki(ratingMap.get(p.id) ?? [], p.rating_skill);
+    ratePenjoki(ratingAkumulasi?.get(p.id) ?? [], p.rating_skill);
 
   // Tidak ada rating transaksi & tidak ada rating kualitas → status netral.
   const kosongOf = (p: PenjokiRow): boolean =>
-    belumAdaData(ratingMap.get(p.id) ?? [], p.rating_skill);
+    belumAdaData(ratingAkumulasi?.get(p.id) ?? [], p.rating_skill);
 
   if (isLoading) return <Spinner />;
 

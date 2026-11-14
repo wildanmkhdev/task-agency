@@ -12,7 +12,7 @@
  *   3. Baris dengan Status Gaji Penjoki belum TRUE (FALSE/kosong).
  *   4. Transaksi lintas tim (penjoki mengerjakan pesanan tim lain).
  *   5. Nama di Excel yang digabung ke nama master (alias).
- *   6. 5 baris Oktober yang dikecualikan dari rekap (footer Excel).
+ *   6. 4 baris Oktober yang dikecualikan dari rekap (footer Excel).
  *   7. Penjoki yang datanya belum lengkap / belum punya transaksi.
  */
 
@@ -367,7 +367,7 @@ async function main(): Promise<void> {
     { kategori: "Status Gaji Penjoki belum TRUE", jumlah: gajiBelum.length, nominal: gajiBelum.reduce((s, x) => s + x.nominal, 0), catatan: "FALSE/kosong di Excel; aplikasi belum menyimpan status ini" },
     { kategori: "Transaksi lintas tim", jumlah: lintas.length, nominal: lintas.reduce((s, x) => s + x.nominal, 0), catatan: "Penjoki mengerjakan pesanan tim lain" },
     { kategori: "Nama di-alias", jumlah: aliasRows.reduce((s, x) => s + x.jumlah, 0), nominal: aliasRows.reduce((s, x) => s + x.nominal, 0), catatan: "Nama Excel digabung ke nama master" },
-    { kategori: "Oktober dikecualikan dari rekap", jumlah: dikecualikan.length, nominal: dikecualikan.reduce((s, x) => s + x.nominal, 0), catatan: "Agar total = footer Excel" },
+    { kategori: "Oktober dikecualikan dari rekap", jumlah: dikecualikan.length, nominal: dikecualikan.reduce((s, x) => s + x.nominal, 0), catatan: "4 baris terakhir Tim 4; total rekap = footer + baris ke-2" },
     { kategori: "Penjoki perlu dilengkapi", jumlah: penjokiPerlu.length, nominal: 0, catatan: "HP/rating/transaksi/nama perlu review" },
     { kategori: "Penjoki tidak sinkron dengan sheet", jumlah: sinkron.filter((x) => x.status !== "SINKRON").length, nominal: 0, catatan: "Nama beda / lintas tim / tanpa transaksi — detail di sheet Sinkron Penjoki" },
   ];

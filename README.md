@@ -62,6 +62,7 @@ prisma/
   seed.ts              # data dasar + 45 penjoki dari rekap DOCX
 scripts/
   seed-auth.ts         # buat akun OWNER + 5 ADMIN via service role
+  generate-icons.py    # render ulang favicon + ikon PWA dari src/assets/logo-mark.png
 src/
   components/          # AppLayout (sidebar navy), UI kit, Export PDF/Excel, ikon
   context/             # AuthContext (session + profile + role)
@@ -109,12 +110,15 @@ Catatan:
 - **Data November 2026 dibersihkan** atas permintaan owner (14 Nov 2026). Importer default
   hanya Sep+Okt; jalankan `--dengan-november` bila ingin mengimpor sheet November lagi.
 - Sheet **"Copy of November"** adalah arsip dan **tidak diimpor** (isinya bisa dobel).
-- Grand total **Oktober** di file Excel masih memakai formula lama `=SUM(E3:E538)` sehingga
-  tidak mencakup 5 baris terakhir. Jumlah seluruh baris = **Rp39.731.500**; footer Excel
-  = **Rp39.355.500**. Rekap aplikasi sengaja mengikuti footer (5 kode di
-  `KODE_DI_LUAR_REKAP`), jadi selisih **Rp376.000** adalah keputusan yang diketahui.
+- Grand total **Oktober** di file Excel masih memakai formula lama `=SUM(E3:E538)`, sehingga
+  melewatkan baris 2 (transaksi pertama) dan baris 539–542 (4 baris terakhir, Tim 4).
+  Jumlah seluruh baris = **Rp39.731.500**; footer Excel = **Rp39.355.500**.
+  Rekap aplikasi **memasukkan baris 2** (Rp88.000) karena tanggalnya sudah dibetulkan owner
+  (14 Nov 2026), dan tetap mengecualikan 4 baris terakhir Tim 4 (Rp288.000) lewat
+  `KODE_DI_LUAR_REKAP`. Total rekap Oktober = **Rp39.443.500** (537 baris).
   Perbaiki formula Excel + kosongkan daftar itu bila ingin memakai total baris penuh.
-- Grand total data aktif (Sep–Okt 2026) = **772 baris · Rp53.884.500**.
+- Grand total data aktif (Sep–Okt 2026) = **772 baris · Rp53.884.500**
+  (rekap aplikasi: **768 baris · Rp53.596.500**).
 - Semua angka rekap dihitung dari transaksi berstatus **SELESAI + LUNAS**.
 
 > **Catatan Prisma + Supabase**: `prisma migrate dev` memakai *shadow database* yang tidak punya schema `auth`. Untuk migrasi yang menyentuh `auth` (trigger, RLS), edit SQL manual di folder migrasi lalu jalankan **`pnpm db:deploy`**.

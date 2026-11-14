@@ -191,17 +191,21 @@ function RingkasanOwner() {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
+        {/* Total Pendapatan di atas, dibentangkan penuh 2 kolom
+            (revisi owner 14 Nov 2026). Sisa kartu mengisi 2 kolom. */}
+        <div className="col-span-2">
+          <Kotak
+            label="Total Pendapatan"
+            value={rupiah(totalPendapatan)}
+            icon="Rp"
+            tone="gold"
+          />
+        </div>
         <Kotak
           label="Total Transaksi"
           value={String(rekap.length)}
           icon="#"
           tone="green"
-        />
-        <Kotak
-          label="Total Pendapatan"
-          value={rupiah(totalPendapatan)}
-          icon="Rp"
-          tone="gold"
         />
         <Kotak
           label={`Kas (${persen(BAGI_HASIL.kas)}%)`}
@@ -224,6 +228,7 @@ function RingkasanOwner() {
           icon="S"
           tone="violet"
         />
+        {/* Sisa 8 kartu mengisi 2 kolom, jadi tidak ada lubang di baris akhir. */}
         <Kotak
           label={`Fee Owner (${persen(BAGI_HASIL.owner)}%)`}
           value={rupiah(fee.owner)}
